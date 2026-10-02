@@ -79,5 +79,10 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - Not done: Canada Gazette Part I consultations (HTML only), Order Paper.
 - Cost note: first run tags about 130 items with Claude (cached afterwards) and fetches about 95 petition pages at 1 request per second.
 
+## Facts used by Phase 3 (verified)
+- Brief form: each study page links to `/committee-participation/en/submit-brief/{code}/{studyId}`: an online form (name, email, phone, country, upload). Its "Conditions for submission" text is parsed for the guide; it links the House's "Guide for Submitting Briefs" (`/Procedure/Guides/brief-e.html`) and the clerk contact page.
+- Committee members: `https://www.ourcommons.ca/Committees/en/{CODE}/Members` lists Chair, Vice-Chairs, Members (name, party, riding). No email addresses are listed there, so the guide links to the page rather than guessing addresses.
+- Claude replies can begin with a thinking block, so code must join only the text blocks (`reply_text`), not read `content[0].text`.
+
 ## Questions
 None open.

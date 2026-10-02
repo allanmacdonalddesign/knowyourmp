@@ -14,6 +14,11 @@ def strip_html(text: str, limit: int = 1500) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()[:limit]
 
 
+def reply_text(resp) -> str:
+    """Join the text blocks of a reply, ignoring thinking or other block types."""
+    return "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "text") == "text").strip()
+
+
 def _prompt(text: str, taxonomy: dict[str, str]) -> str:
     topics = "\n".join(f"- {k}: {v}" for k, v in taxonomy.items())
     return (
@@ -53,6 +58,6 @@ class Classifier:
             max_tokens=60,
             messages=[{"role": "user", "content": _prompt(strip_html(text), self.taxonomy)}],
         )
-        topics = parse_topics(resp.content[0].text, self.taxonomy)
+        topics = parse_topics(reply_text(resp), self.taxonomy)
         self.cache.put(source_url, topics, CLASSIFIER_MODEL)
         return topics

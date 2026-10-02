@@ -83,15 +83,8 @@ def _render(p: prof.Profile, slug):
         typer.echo(f"\nNote: {n}")
 
 
-@app.command("opportunities")
-def opportunities_cmd(
-    postal_code: str,
-    interests: str = typer.Option(..., help="Comma-separated, e.g. housing,climate"),
-    pick: int = typer.Option(None, help="Choose a riding when the postal code is split"),
-    limit: int = typer.Option(10, help="How many to show"),
-    show_all: bool = typer.Option(False, "--all", help="Include opportunities that don't match your interests"),
-):
-    """Ranked, explained opportunities to act on, for your MP and interests."""
+def _rank(postal_code, interests, pick, show_all):
+    """Shared by opportunities / letter / brief so item numbers always match."""
     from datetime import date
 
     from .analysis.interests import resolve
@@ -121,24 +114,38 @@ def opportunities_cmd(
     profile, _, roles = _mp_context(db, fetcher, mp)
     mp_topics = set(profile.topic_counts)
     my_committees = {code for code, _ in roles.committees} if roles else set()
+    today = date.today()
 
     scored: list[opp.Opportunity] = []
     studies = committees.fetch_open_studies(fetcher)
     study_bills = {m.group(0) for s in studies if (m := re.search(r"Bill [CS]-\d+", s.title))}
     for s in studies:
-        scored.append(opp.score(opp.from_study(s, clf.classify(s.url, s.title)), wanted, mp_topics, my_committees, date.today(), s=s))
+        scored.append(opp.score(opp.from_study(s, clf.classify(s.url, s.title)), wanted, mp_topics, my_committees, today, s=s))
     for b in legisinfo.fetch_active(fetcher):
         if f"Bill {b.number}" in study_bills:
             continue  # already shown as an open committee study
-        scored.append(opp.score(opp.from_bill(b, clf.classify(b.url, b.title)), wanted, mp_topics, my_committees, date.today(), b=b))
+        scored.append(opp.score(opp.from_bill(b, clf.classify(b.url, b.title)), wanted, mp_topics, my_committees, today, b=b))
     for p in petitions.fetch_open(fetcher):
         text = petitions.fetch_text(fetcher, p)
         topics = clf.classify(p.url, f"{p.category}. {', '.join(p.keywords)}. {text}")
-        scored.append(opp.score(opp.from_petition(p, text, topics), wanted, mp_topics, my_committees, date.today(), p=p))
+        scored.append(opp.score(opp.from_petition(p, text, topics), wanted, mp_topics, my_committees, today, p=p))
 
     shown = [o for o in scored if o.score >= 0 and (show_all or set(o.topics) & wanted)]
     shown.sort(key=lambda o: o.score, reverse=True)
-    typer.echo(f"\nOpportunities for {mp.name} ({mp.riding}); interests: {', '.join(sorted(wanted))}")
+    return mp, profile, roles, shown, fetcher, db
+
+
+@app.command("opportunities")
+def opportunities_cmd(
+    postal_code: str,
+    interests: str = typer.Option(..., help="Comma-separated, e.g. housing,climate"),
+    pick: int = typer.Option(None, help="Choose a riding when the postal code is split"),
+    limit: int = typer.Option(10, help="How many to show"),
+    show_all: bool = typer.Option(False, "--all", help="Include opportunities that don't match your interests"),
+):
+    """Ranked, explained opportunities to act on, for your MP and interests."""
+    mp, _, _, shown, _, _ = _rank(postal_code, interests, pick, show_all)
+    typer.echo(f"\nOpportunities for {mp.name} ({mp.riding})")
     if not shown:
         typer.echo("Nothing open matches those interests right now. Try --all or other interests.")
     for i, o in enumerate(shown[:limit], 1):
@@ -147,3 +154,64 @@ def opportunities_cmd(
         typer.echo("   Ranked high because: " + "; ".join(o.reasons))
         typer.echo(f"   Do this: {o.action}")
         typer.echo(f"   Link: {o.url}")
+    if shown:
+        typer.echo("\nNext: `letter` or `brief` with the same postal code and --interests, plus --item N.")
+
+
+def _item(shown, n):
+    if not 1 <= n <= len(shown):
+        typer.echo(f"--item must be between 1 and {len(shown)} (numbers match the `opportunities` list).")
+        raise typer.Exit(1)
+    return shown[n - 1]
+
+
+@app.command("brief")
+def brief_cmd(
+    postal_code: str,
+    interests: str = typer.Option(..., help="Same interests you used for `opportunities`"),
+    item: int = typer.Option(..., help="Item number from `opportunities` (must be a committee study)"),
+    pick: int = typer.Option(None),
+):
+    """Guide to submitting a brief to a committee: real deadline, limits, conditions and form."""
+    from datetime import date
+
+    from .actions import brief_guide
+    from .sources import committees
+
+    mp, _, _, shown, fetcher, _ = _rank(postal_code, interests, pick, False)
+    o = _item(shown, item)
+    if o.kind != "committee_study":
+        typer.echo(f"Item {item} is a {o.kind.replace('_', ' ')}, not a committee study; briefs only apply to studies.")
+        raise typer.Exit(1)
+    sub = committees.fetch_submission(fetcher, o.ref)
+    members = committees.fetch_members(fetcher, o.ref.code)
+    typer.echo("\n" + brief_guide.render(o.ref, sub, members, date.today(), mp.name))
+
+
+@app.command("letter")
+def letter_cmd(
+    postal_code: str,
+    interests: str = typer.Option(..., help="Same interests you used for `opportunities`"),
+    item: int = typer.Option(..., help="Item number from `opportunities` (a bill or committee study)"),
+    why: str = typer.Option("", help="Why it matters to you, in your own words (strongly recommended)"),
+    ask: str = typer.Option("", help="Your own specific ask; replaces the default"),
+    position: str = typer.Option("support", help="support or oppose (for bills)"),
+    pick: int = typer.Option(None),
+):
+    """Draft a short personal letter to your MP citing their real statements. Prints it; never sends."""
+    from .actions import letter
+
+    mp, profile, roles, shown, _, db = _rank(postal_code, interests, pick, False)
+    o = _item(shown, item)
+    if o.kind == "petition":
+        typer.echo("For a petition the action is to sign it (link below); a letter isn't needed.\n" + o.url)
+        raise typer.Exit(0)
+    mine = {code for code, _ in roles.committees} if roles else set()
+    code = o.ref.code if o.kind == "committee_study" and o.ref.code in mine else None
+    li = letter.LetterInput(mp.name, mp.riding, o.title, o.url, o.kind, why, ask, position, code, o.topics)
+    client = None
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic
+
+        client = anthropic.Anthropic()
+    typer.echo("\n" + letter.draft(li, profile.champions, client))

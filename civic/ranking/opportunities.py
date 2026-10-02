@@ -17,6 +17,7 @@ class Opportunity:
     deadline: date | None = None
     score: int = 0
     reasons: list[str] = field(default_factory=list)
+    ref: object = None  # the underlying Study / LegisBill / Petition
 
 
 def from_study(s: committees.Study, topics: list[str]) -> Opportunity:
@@ -29,7 +30,7 @@ def from_study(s: committees.Study, topics: list[str]) -> Opportunity:
         "committee_study", f"{s.code}: {s.title}", s.url, topics, "; ".join(bits),
         "Submit a short written brief to the committee, and email the committee members (not only your own MP). "
         "Use the study page for how to submit.",
-        s.deadline,
+        s.deadline, ref=s,
     )
 
 
@@ -41,7 +42,7 @@ def from_bill(b: legisinfo.LegisBill, topics: list[str]) -> Opportunity:
         action = "Private members' bills often get free votes: write your MP a personal letter asking for their vote and why."
     else:
         action = "Whipped vote likely: a personal letter to your MP is low leverage; consider contacting the committee or a minister's office instead."
-    return Opportunity("bill", f"Bill {b.number}: {b.title}", b.url, topics, f"{kind}; {b.status}", action)
+    return Opportunity("bill", f"Bill {b.number}: {b.title}", b.url, topics, f"{kind}; {b.status}", action, ref=b)
 
 
 def from_petition(p: petitions.Petition, text: str, topics: list[str]) -> Opportunity:
@@ -52,7 +53,7 @@ def from_petition(p: petitions.Petition, text: str, topics: list[str]) -> Opport
         detail += "; already past the 500 needed for a government response"
     else:
         action += f" It needs {petitions.THRESHOLD - p.signatures} more for a mandatory government response; share it with people it affects."
-    return Opportunity("petition", f"Petition {p.id}: {first or p.category}", p.url, topics, detail, action, p.closes)
+    return Opportunity("petition", f"Petition {p.id}: {first or p.category}", p.url, topics, detail, action, p.closes, ref=p)
 
 
 def score(o: Opportunity, user_topics: set[str], mp_topics: set[str], my_committees: set[str],

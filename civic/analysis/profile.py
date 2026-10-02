@@ -1,4 +1,5 @@
 """Build an MP profile: 'Responsible for' (assigned) vs 'Personally champions' (chosen). Every claim has a source URL."""
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -13,6 +14,7 @@ class Claim:
     text: str
     url: str
     topics: list[str] = field(default_factory=list)
+    quote: str = ""  # short excerpt for letters; empty for roles and bills
 
 
 @dataclass
@@ -46,7 +48,8 @@ def build_profile(mp, slug: str | None, roles: MemberRoles | None, speeches, bil
         champions.append(c)
     for s in speeches:
         if s.h1 == MEMBERS_STATEMENTS_H1:
-            champions.append(Claim(f"Members' statement ({s.time[:10]}): {s.h2 or 'untitled'}", op.SITE + s.url))
+            champions.append(Claim(f"Members' statement ({s.time[:10]}): {s.h2 or 'untitled'}", op.SITE + s.url,
+                                   quote=re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s.text)).strip()[:400]))
     if classifier:
         for c in champions:
             source_text = c.text
