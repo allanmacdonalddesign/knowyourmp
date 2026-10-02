@@ -132,10 +132,17 @@ def letter_text(r: Ranked, n: int, why: str = "", ask: str = "", position: str =
 def card(postal_code: str, pick: int | None = None):
     """The MP 'baseball card' for a postal code."""
     from .analysis import card as cardmod
+    from .analysis import plain
 
     db = cache.connect()
     fetcher = Fetcher(cache.HttpCache(db))
     mp = find_mp(fetcher, postal_code, pick)
     profile, slug, _ = mp_context(db, fetcher, mp)
     bills = op.sponsored_bills(fetcher, slug) if slug else []
-    return cardmod.build_card(fetcher, mp, profile, slug, bills, classifier=classifier(db))
+    llm = None
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        import anthropic
+
+        llm = anthropic.Anthropic()
+    explainer = plain.BillExplainer(llm, fetcher, cache.PlainBillCache(db)) if llm else None
+    return cardmod.build_card(fetcher, mp, profile, slug, bills, classifier=classifier(db), explainer=explainer, llm=llm)

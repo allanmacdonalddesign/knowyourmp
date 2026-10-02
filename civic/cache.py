@@ -16,6 +16,9 @@ def connect(path=None) -> sqlite3.Connection:
         "CREATE TABLE IF NOT EXISTS classifications "
         "(source_url TEXT PRIMARY KEY, topics TEXT, model TEXT, classified_at REAL)"
     )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS plain_bills (bill_url TEXT PRIMARY KEY, text TEXT, grounded INTEGER, model TEXT, created_at REAL)"
+    )
     return db
 
 
@@ -47,4 +50,17 @@ class ClassificationCache:
             "INSERT OR REPLACE INTO classifications VALUES (?,?,?,?)",
             (source_url, json.dumps(topics), model, time.time()),
         )
+        self.db.commit()
+
+
+class PlainBillCache:
+    def __init__(self, db: sqlite3.Connection):
+        self.db = db
+
+    def get(self, bill_url: str):
+        row = self.db.execute("SELECT text, grounded FROM plain_bills WHERE bill_url=?", (bill_url,)).fetchone()
+        return (row[0], bool(row[1])) if row else None
+
+    def put(self, bill_url: str, text: str, grounded: bool, model: str) -> None:
+        self.db.execute("INSERT OR REPLACE INTO plain_bills VALUES (?,?,?,?,?)", (bill_url, text, int(grounded), model, time.time()))
         self.db.commit()

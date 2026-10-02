@@ -84,5 +84,12 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - Committee members: `https://www.ourcommons.ca/Committees/en/{CODE}/Members` lists Chair, Vice-Chairs, Members (name, party, riding). No email addresses are listed there, so the guide links to the page rather than guessing addresses.
 - Claude replies can begin with a thinking block, so code must join only the text blocks (`reply_text`), not read `content[0].text`.
 
+## Facts used for plain-language cards (verified)
+- `/votes/?session=45-1&limit=1000` returns every House vote with description, result and `bill_url` in ONE request (174 votes), so no per-vote fetch is needed to find bill-deciding votes. Descriptions starting "2nd reading" / "3rd reading" with a `bill_url` are bill-passage votes; amendments, "Government Business" motions and supply votes are procedural and are only counted.
+- `/votes/ballots/?politician=slug&limit=1000` lists an MP's Yes/No/Paired ballots (absences are not listed).
+- Each bill's text on parl.ca (`text_url` in the bill detail) has a "SUMMARY" written by Parliament. Bills at first reading can show only a table of contents under that heading, so a summary must look like prose.
+- Plain-language sentences are generated from the official title plus that summary, cached per bill in SQLite (`plain_bills`), and refusals or rambling answers are rejected (the official title is shown instead).
+- The card's "At a glance" overview must cite item ids; sentences with no valid source are dropped.
+
 ## Questions
 None open.

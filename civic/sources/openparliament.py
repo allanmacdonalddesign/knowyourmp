@@ -152,3 +152,42 @@ def vote_detail(fetcher: Fetcher, vote_url: str) -> VoteDetail:
         vote_url, d["date"], _en(d["description"]) or "", d["result"], d.get("bill_url"),
         {_en(p["party"]["short_name"]): p["vote"] for p in d.get("party_votes", [])},
     )
+
+
+@dataclass(frozen=True)
+class VoteSummary:
+    url: str
+    number: int
+    date: str
+    description: str
+    result: str
+    bill_url: str | None
+
+
+def votes_list(fetcher: Fetcher, session: str) -> list[VoteSummary]:
+    """Every House vote in a session, newest first, in one request."""
+    data = fetcher.get_json(f"{API}/votes/", {"session": session, "format": "json", "limit": 1000}, max_age=6 * 3600)
+    return [
+        VoteSummary(o["url"], o["number"], o["date"], _en(o["description"]) or "", o["result"], o.get("bill_url"))
+        for o in data["objects"]
+    ]
+
+
+@dataclass(frozen=True)
+class BillInfo:
+    url: str
+    number: str
+    title: str
+    short_title: str
+    text_url: str | None
+    private_member_bill: bool
+    became_law: bool
+    status: str
+
+
+def bill_info(fetcher: Fetcher, bill_url: str) -> BillInfo:
+    d = fetcher.get_json(API + bill_url, {"format": "json"}, max_age=7 * 86400)
+    return BillInfo(
+        bill_url, d["number"], _en(d["name"]) or "", _en(d.get("short_title")) or "", d.get("text_url"),
+        bool(d.get("private_member_bill")), bool(d.get("law")), _en(d.get("status")) or "",
+    )

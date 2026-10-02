@@ -27,7 +27,7 @@ details{margin-top:8px}summary{cursor:pointer;color:var(--accent)}
 .chip{display:inline-block;padding:1px 8px;border-radius:99px;border:1px solid var(--line);font-size:.8rem;margin:0 4px 0 0;color:var(--muted)}
 .chip.good{border-color:var(--accent);color:var(--accent)}.item{padding:8px 0;border-top:1px solid var(--line)}.item:first-of-type{border-top:0}
 .chips label{display:inline-block;font-weight:400;margin:3px 10px 3px 0}h2{font-size:1.15rem;margin:26px 0 4px}
-.sticky{position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:2}.hidden{display:none}button:disabled{opacity:.5;cursor:not-allowed}
+.fine{color:var(--muted);font-size:.78rem;margin-top:2px}.sticky{position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:2}.hidden{display:none}button:disabled{opacity:.5;cursor:not-allowed}
 """
 
 TOPIC_LABELS = {
@@ -133,7 +133,7 @@ def card_page(c, postal, pick) -> bytes:
 
     # --- topic chips with how much the MP has done on each
     counts: dict[str, int] = {}
-    for topics in ([x.topics for x in p.champions if x.quote] + [x.topics for x in c.recent] + list(c.bill_topics.values())):
+    for topics in ([x.topics for x in p.champions if x.quote] + [kv.topics for kv in c.key_votes] + list(c.bill_topics.values())):
         for t in set(topics) - {"other"}:
             counts[t] = counts.get(t, 0) + 1
     tagged = bool(counts) or any(x.topics for x in p.champions)
@@ -155,10 +155,13 @@ def card_page(c, postal, pick) -> bytes:
     bills_html = ""
     for b in c.bills:
         topics = c.bill_topics.get(b.url, [])
+        plain_txt = c.bill_plain.get(b.url) or b.title
         badge = '<span class="chip good">became law</span>' if b.became_law else ""
         kind = "private member's bill" if b.is_private_member_bill else "government bill"
-        bills_html += _item(topics, f"{b.number} {b.title}", f"<div>{badge}<strong>Bill {escape(b.number)}</strong>: {escape(b.title)}</div>"
-                            f'<div class="why">{kind}, {escape(b.session)}: {escape(b.status)} &middot; {_tags(topics)} {_link("https://openparliament.ca" + b.url)}</div>')
+        bills_html += _item(topics, f"{b.number} {plain_txt} {b.title}",
+                            f"<div>{badge}<strong>{escape(plain_txt)}</strong></div>"
+                            f'<div class="why">Bill {escape(b.number)} &middot; {kind}, {escape(b.session)} &middot; {escape(b.status)} &middot; {_tags(topics)} {_link("https://openparliament.ca" + b.url)}</div>'
+                            f'<div class="fine">Official title: {escape(b.title)}</div>')
     bills_html = bills_html or '<p class="why">No sponsored bills on record.</p>'
 
     stmts = [x for x in p.champions if x.quote]
@@ -166,23 +169,47 @@ def card_page(c, postal, pick) -> bytes:
         _item(x.topics, x.text + " " + x.quote, f"<div>{escape(x.text)}</div><div class=\"why\">{escape(x.quote[:200])}{'…' if len(x.quote) > 200 else ''} &middot; {_tags(x.topics)} {_link(x.url)}</div>")
         for x in stmts) or '<p class="why">No members\' statements on record.</p>'
 
-    def vote_row(v) -> str:
-        side = {True: '<span class="chip good">with party</span>', False: '<span class="chip">against party</span>', None: ""}[v.with_party]
-        return _item(v.topics, v.description, f'<div><span class="chip">{escape(v.ballot)}</span>{side}{escape(v.description)}</div>'
-                     f'<div class="why">{escape(v.date)} &middot; {escape(v.result)} &middot; {_tags(v.topics)} {_link("https://openparliament.ca" + v.url)}</div>')
-    shown = "".join(vote_row(v) for v in c.recent[:10])
-    more = "".join(vote_row(v) for v in c.recent[10:])
-    votes_html = shown + (f"<details><summary>Show {len(c.recent) - 10} more votes</summary>{more}</details>" if more else "")
-    votes_html = votes_html or '<p class="why">No votes on record.</p>'
+    def kv_row(v) -> str:
+        when = f"{escape(v.date)}" + (" &middot; passed" if v.result == "Passed" else f" &middot; {escape(v.result.lower())}")
+        stage = "final vote" if v.stage == "3rd reading" else "vote to move it forward (2nd reading)"
+        return _item(v.topics, f"{v.plain} {v.legal_title}",
+                     f"<div><strong>{escape(v.plain)}</strong></div>"
+                     f'<div class="why">Bill {escape(v.number)} &middot; {stage} &middot; {when} &middot; {_tags(v.topics)} {_link("https://openparliament.ca" + v.vote_url, "vote record")}</div>'
+                     f'<div class="fine">Official title: {escape(v.legal_title)}</div>')
+
+    def kv_list(vs) -> str:
+        if not vs:
+            return '<p class="why">None on record.</p>'
+        head = "".join(kv_row(v) for v in vs[:6])
+        rest = "".join(kv_row(v) for v in vs[6:])
+        return head + (f"<details><summary>Show {len(vs) - 6} more</summary>{rest}</details>" if rest else "")
+
+    def refs(ids) -> str:
+        return "".join(f' <sup><a href="{escape(c.ref_links[i][1])}" target="_blank" rel="noopener noreferrer" title="{escape(c.ref_links[i][0])}">[{n}]</a></sup>'
+                       for n, i in enumerate(ids, 1) if i in c.ref_links)
+
+    if c.overview:
+        overview_html = ('<div class="card"><h2 style="margin-top:0">At a glance</h2>'
+                         + "".join(f"<p>{escape(x['text'])}{refs(x['refs'])}</p>" for x in c.overview)
+                         + '<div class="fine">Written by AI from the linked records only. Click a [number] to see the source.</div></div>')
+    else:
+        overview_html = ""
+
+    votes_html = (
+        f'<h2>Bills they voted for</h2><div class="why">Votes that decided a bill (second or third reading). '
+        f"They also took part in {c.other_votes} other votes on amendments and procedure, not described here.</div>{kv_list(c.backed)}"
+        f'<h2>Bills they voted against</h2><div class="why">"Against" means they voted No on that bill. It does not mean they oppose everything in it, and MPs usually follow their party.</div>{kv_list(c.opposed)}'
+        '<div class="fine">Plain-language descriptions are written by AI from Parliament\'s official summary of each bill; the official title is shown under each one.</div>'
+    ) if c.key_votes else '<h2>How they voted</h2><p class="why">No bill-deciding votes on record this session.</p>'
 
     roles = "".join(f"<li>{escape(x.text)}</li>" for x in p.responsible_for)
     other = ", ".join(f"{escape(k)} ({n})" for k, n in p.assigned_activity.most_common(5))
     notes = "".join(f'<div class="note">{escape(n)}</div>' for n in c.notes + p.notes)
 
-    body = f"""{hero}<div class="stats">{"".join(stats)}</div>{discipline}{notes}{filt}
-<h2>Bills they've sponsored</h2><div class="why">Whether they became law is shown on each bill.</div>{bills_html}
+    body = f"""{hero}<div class="stats">{"".join(stats)}</div>{overview_html}{discipline}{notes}{filt}
+{votes_html}
+<h2>Bills they've sponsored</h2><div class="why">Bills this MP put forward themselves.</div>{bills_html}
 <h2>What they choose to speak about</h2><div class="why">Members' statements are 60-second speeches each MP picks the subject of.</div>{stmts_html}
-<h2>Recent votes</h2><div class="why">Newest first. "Against party" means they voted differently from their party's position.</div>{votes_html}
 <h2>Roles and committees</h2><div class="why">Assigned by position or party, so weighted lightly as a sign of personal interest.</div><ul>{roles}</ul>
 {f'<div class="why">Other activity: {other}</div>' if other else ''}
 <p style="margin-top:28px"><a href="/">&larr; Look up another postal code</a></p><script>{FILTER_JS}</script>"""
