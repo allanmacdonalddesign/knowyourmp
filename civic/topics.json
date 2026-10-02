@@ -1,0 +1,19 @@
+{
+  "housing": "Housing supply, rent, homelessness, mortgages",
+  "health": "Health care, mental health, pharmacare, public health",
+  "climate_environment": "Climate change, emissions, energy transition, conservation, pollution",
+  "immigration": "Immigration, refugees, citizenship, border services",
+  "justice": "Criminal law, policing, courts, public safety",
+  "indigenous_affairs": "Indigenous rights, reconciliation, treaties, services",
+  "economy_cost_of_living": "Inflation, taxes, jobs, trade, business, groceries, affordability",
+  "defence_foreign_affairs": "Military, security, diplomacy, international development",
+  "transportation_infrastructure": "Transit, roads, rail, aviation, ports, infrastructure",
+  "education_children_families": "Education, child care, youth, family policy",
+  "seniors_pensions": "Seniors, pensions, retirement",
+  "technology_privacy": "Digital policy, AI, privacy, online harms, telecom",
+  "agriculture_rural": "Farming, food supply, fisheries, rural issues",
+  "arts_culture_sport": "Arts, culture, heritage, broadcasting, sport",
+  "democracy_government": "Elections, parliament, ethics, government operations",
+  "gender_equality_rights": "Women's issues, 2SLGBTQI+ rights, human rights, accessibility",
+  "other": "None of the above"
+}
