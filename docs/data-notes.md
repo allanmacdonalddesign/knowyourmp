@@ -62,5 +62,13 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - Tried ~25 postal codes. None returned more than one federal MP. `G0A1A0` has a non-empty `boundaries_concordance` and `representatives_concordance` array but it was not federal: the single MP came from `representatives_centroid` and the concordance list had no federal-district entry. Sample: `samples/represent_postcode_G0A1A0_split.json`.
 - Until a real straddling federal postcode is found, code must treat "more than one MP across centroid + concordance (deduped by name)" as a split, ask the user to choose or give a full address, and never pick silently. Tests will use a hand-built fixture for this case, clearly labelled synthetic.
 
+## Facts used by Phase 1 (verified)
+- openparliament `/politicians/?name=Full+Name` returns the matching MP (use exact-name match; ambiguous names return None rather than guess).
+- openparliament `/bills/?sponsor_politician={slug}` lists a member's sponsored bills (slug, not path). Bill detail gives `private_member_bill`, `sponsor_politician_url`, `status`.
+- Roles and current committees are not in openparliament. They come from the ourcommons member page ("Current Roles" block); parsed in `civic/sources/ourcommons_member.py`.
+- Committee tenure is unavailable, so committees are shown under "Responsible for", not as a chosen signal.
+- Petitions an MP has presented: no source found yet.
+- Topic tagging: Claude Haiku 4.5, taxonomy in `civic/topics.json`, cached per source URL in SQLite.
+
 ## Questions
 None open.
