@@ -57,7 +57,7 @@ def find_mp(fetcher, postal_code: str, pick: int | None = None):
 
 
 def mp_context(db, fetcher, mp):
-    slug = op.find_slug(fetcher, mp.name)
+    slug = op.find_slug(fetcher, mp.name, op.parl_id_from_url(mp.ourcommons_url))
     roles = ourcommons_member.fetch_roles(fetcher, mp.ourcommons_url) if mp.ourcommons_url else None
     speeches = op.speeches(fetcher, slug) if slug else []
     bills = op.sponsored_bills(fetcher, slug) if slug else []

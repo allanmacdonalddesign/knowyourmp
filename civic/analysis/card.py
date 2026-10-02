@@ -70,6 +70,13 @@ def build_card(fetcher, mp, profile, slug, bills, session: str = "45-1", classif
         card.photo_url = op.SITE + info["image"]
     starts = [m["start_date"] for m in info.get("memberships", []) if m.get("start_date")]
     card.mp_since = min(starts) if starts else None
+    ended = [m["end_date"] for m in info.get("memberships", []) if m.get("end_date")]
+    open_now = any(not m.get("end_date") for m in info.get("memberships", []))
+    if ended and not open_now:
+        card.notes.append(
+            f"openparliament.ca shows {mp.name}'s time as an MP ended on {max(ended)}. The lookup service may be out of date: "
+            "the seat could be vacant or held by someone new. The record below is their past work, so check the official page before contacting them."
+        )
     bl = op.ballots(fetcher, slug, session)
     card.ballots_cast = Counter(b.ballot for b in bl)
     card.votes_total = op.latest_vote_number(fetcher, session)

@@ -32,8 +32,11 @@ def parse_roles(html: str) -> MemberRoles:
     i = start + 1
     while i < len(runs):
         r = runs[i]
-        if r in ("Parliamentary Associations and Interparliamentary Groups", "Past Roles", "Contact"):
+        if r in ("Parliamentary Associations and Interparliamentary Groups", "All Roles", "Past Roles", "Contact", "Recent Work"):
             break
+        if r in ("Offices and Roles as a Parliamentarian", "Executive Committees"):
+            i += 1
+            continue
         if r == "Committees":
             section = "committees"
         elif section == "committees":

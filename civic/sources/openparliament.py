@@ -1,4 +1,6 @@
 """openparliament.ca: the historical record (House of Commons only)."""
+import re
+import unicodedata
 from dataclasses import dataclass
 
 from ..http import Fetcher
@@ -34,12 +36,39 @@ def _en(value) -> str | None:
     return value
 
 
-def find_slug(fetcher: Fetcher, name: str) -> str | None:
+def slugify(name: str) -> str:
+    base = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+
+
+def parl_id_from_url(ourcommons_url: str | None) -> str | None:
+    m = re.search(r"\((\d+)\)", ourcommons_url or "")
+    return m.group(1) if m else None
+
+
+def find_slug(fetcher: Fetcher, name: str, parl_id: str | None = None) -> str | None:
+    """Match an MP to their openparliament slug, verifying by House member id when we have it.
+
+    The `?name=` filter misses some members (e.g. Steven Guilbeault), so also try the slugified name directly.
+    Never guesses: returns None unless the name or the member id confirms the match.
+    """
+    candidates = []
     data = fetcher.get_json(f"{API}/politicians/", {"name": name, "format": "json"})
-    objs = data.get("objects", [])
-    # The name filter can be loose; require an exact (case-insensitive) match.
-    exact = [o for o in objs if o["name"].casefold() == name.casefold()]
-    return exact[0]["url"].strip("/").split("/")[-1] if len(exact) == 1 else None
+    candidates += [o["url"].strip("/").split("/")[-1] for o in data.get("objects", []) if o["name"].casefold() == name.casefold()]
+    guess = slugify(name)
+    if guess and guess not in candidates:
+        candidates.append(guess)
+    for slug in candidates:
+        try:
+            info = fetcher.get_json(f"{API}/politicians/{slug}/", {"format": "json"}, max_age=30 * 86400)
+        except Exception:
+            continue
+        ids = (info.get("other_info") or {}).get("parl_mp_id") or []
+        if parl_id and parl_id in ids:
+            return slug
+        if not parl_id and info.get("name", "").casefold() == name.casefold():
+            return slug
+    return None
 
 
 def speeches(fetcher: Fetcher, slug: str, max_pages: int = 10, page_size: int = 100) -> list[Speech]:
