@@ -1,7 +1,0 @@
-httpx
-typer
-anthropic
-
-[dev]
-pytest
-respx
