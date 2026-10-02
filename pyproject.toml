@@ -1,7 +1,7 @@
 [project]
 name = "civic"
 version = "0.1.0"
-description = "Civic Leverage Tool: where can you still change an outcome?"
+description = "MP baseball cards: who your MP is and what they actually do"
 requires-python = ">=3.11"
 dependencies = ["httpx", "typer", "anthropic"]
 
@@ -9,7 +9,7 @@ dependencies = ["httpx", "typer", "anthropic"]
 dev = ["pytest", "respx"]
 
 [tool.setuptools]
-packages = ["civic", "civic.sources", "civic.analysis", "civic.ranking", "civic.actions"]
+packages = ["civic", "civic.sources", "civic.analysis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

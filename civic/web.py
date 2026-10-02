@@ -1,34 +1,15 @@
-"""Tiny local web UI (stdlib only). Runs on this machine; nothing is stored or logged, nothing is sent anywhere."""
+"""Local web UI (stdlib only): postal code -> MP baseball card. Runs on this machine; nothing stored, logged or sent.
+
+Design: mint paper, deep-green ink, hairline-bordered boxes, mono labels with arrows, big light type.
+No external fonts, scripts or images from third parties except the MP's official photo.
+"""
 import re
+from datetime import date
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 from . import service
-from .analysis.classify import load_taxonomy
-
-CSS = """
-:root{--bg:#fff;--fg:#1d2327;--muted:#5b6770;--card:#f5f6f7;--line:#d6dadd;--accent:#1f5fbf}
-@media (prefers-color-scheme:dark){:root{--bg:#14181b;--fg:#e8eaec;--muted:#98a2ab;--card:#1d2226;--line:#333b41;--accent:#7ab0ff}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
-main{max-width:760px;margin:0 auto;padding:24px 16px 64px}h1{font-size:1.5rem;margin:0 0 4px}
-p.sub{color:var(--muted);margin:0 0 20px}a{color:var(--accent)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0}
-.why{color:var(--muted);font-size:.92rem}.score{font-weight:700;color:var(--accent)}
-label{display:block;margin:10px 0 4px;font-weight:600}input[type=text],textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
-textarea{min-height:90px}button{font:inherit;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
-button.alt{background:transparent;color:var(--accent)}.topics label{display:inline-block;font-weight:400;margin:4px 14px 4px 0}
-pre{white-space:pre-wrap;word-wrap:break-word;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;font:inherit}
-.note{border-left:4px solid var(--accent);padding:6px 12px;margin:14px 0;color:var(--muted)}.err{border-color:#c0392b;color:inherit}
-details{margin-top:8px}summary{cursor:pointer;color:var(--accent)}
-.hero{display:flex;gap:16px;align-items:center}.hero img{width:96px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
-.hero h1{margin:0}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:14px 0}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}.stat b{display:block;font-size:1.35rem}
-.chip{display:inline-block;padding:1px 8px;border-radius:99px;border:1px solid var(--line);font-size:.8rem;margin:0 4px 0 0;color:var(--muted)}
-.chip.good{border-color:var(--accent);color:var(--accent)}.item{padding:8px 0;border-top:1px solid var(--line)}.item:first-of-type{border-top:0}
-.chips label{display:inline-block;font-weight:400;margin:3px 10px 3px 0}h2{font-size:1.15rem;margin:26px 0 4px}
-.fine{color:var(--muted);font-size:.78rem;margin-top:2px}.sticky{position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:2}.hidden{display:none}button:disabled{opacity:.5;cursor:not-allowed}
-"""
 
 TOPIC_LABELS = {
     "housing": "Housing", "health": "Health", "climate_environment": "Climate & environment", "immigration": "Immigration",
@@ -38,224 +19,295 @@ TOPIC_LABELS = {
     "technology_privacy": "Technology & privacy", "agriculture_rural": "Agriculture & rural", "arts_culture_sport": "Arts, culture & sport",
     "democracy_government": "Democracy & government", "gender_equality_rights": "Gender equality & rights",
 }
-assert set(TOPIC_LABELS) == set(load_taxonomy()) - {"other"}, "web labels out of sync with civic/topics.json"
 
-
-def page(title: str, body: str) -> bytes:
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{escape(title)}</title><style>{CSS}</style></head><body><main>{body}</main></body></html>""".encode()
-
-
-def linkify(text: str) -> str:
-    return re.sub(r"(https://[^\s<)]+)", r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', escape(text))
-
-
-def home(msg: str = "", postal: str = "") -> bytes:
-    err = f'<div class="note err">{escape(msg)}</div>' if msg else ""
-    return page("Civic Leverage Tool", f"""<h1>Civic Leverage Tool</h1>
-<p class="sub">Meet your MP, see what they actually do, then find where you can make a difference.</p>{err}
-<form method="post" action="/mp">
-<label for="postal">Where do you live? (postal code)</label><input type="text" id="postal" name="postal" value="{escape(postal)}" placeholder="M5V 3L9" required maxlength="10" autocomplete="off">
-<p class="why">The first lookup for an MP can take a minute while it reads public records; after that it is fast. Your postal code is not stored or logged.</p>
-<button type="submit">Find my MP</button></form>""")
-
-
-def hidden(postal, interests, pick, extra: dict | None = None) -> str:
-    fields = {"postal": postal, "pick": pick or ""}
-    fields.update(extra or {})
-    out = "".join(f'<input type="hidden" name="{k}" value="{escape(str(v))}">' for k, v in fields.items())
-    return out + "".join(f'<input type="hidden" name="interests" value="{escape(i)}">' for i in interests)
-
-
-def _topics_attr(topics) -> str:
-    return escape(" ".join(t for t in topics if t != "other"))
-
-
-def _item(topics, text: str, inner: str) -> str:
-    return f'<div class="item" data-item data-topics="{_topics_attr(topics)}" data-text="{escape(text.lower())}">{inner}</div>'
-
-
-def _link(url: str, label: str = "source") -> str:
-    return f'<a href="{escape(url)}" target="_blank" rel="noopener noreferrer">{escape(label)}</a>'
-
-
-def _tags(topics) -> str:
-    return "".join(f'<span class="chip">{escape(TOPIC_LABELS.get(t, t))}</span>' for t in topics if t != "other")
-
-
-FILTER_JS = """
-const form=document.getElementById('filter'),q=document.getElementById('q'),items=[...document.querySelectorAll('[data-item]')],
- boxes=[...form.querySelectorAll('input[name=interests]')],go=document.getElementById('go'),count=document.getElementById('count');
-function apply(){const want=boxes.filter(b=>b.checked).map(b=>b.value),text=q.value.trim().toLowerCase();let n=0;
- items.forEach(it=>{const t=(it.dataset.topics||'').split(' ').filter(Boolean);
-  const ok=(!want.length||want.some(w=>t.includes(w)))&&(!text||it.dataset.text.includes(text));it.classList.toggle('hidden',!ok);if(ok)n++;});
- count.textContent=(want.length||text)?('Showing '+n+' of '+items.length+' items'):'';go.disabled=!want.length;}
-form.addEventListener('input',apply);form.addEventListener('submit',e=>{if(!boxes.some(b=>b.checked))e.preventDefault();});apply();
+CSS = """
+:root{--bg:#e7f1ec;--ink:#1c4a3a;--soft:#4b7566;--line:#2d7a62;--wash:rgba(255,255,255,.45);--paper:#fff;
+--sans:"Manrope","Inter",ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+--mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1b16;--ink:#bfe6d3;--soft:#85b5a0;--line:#2c6b55;--wash:rgba(255,255,255,.05);--paper:#0e1b16}}
+*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{overflow-wrap:break-word}
+body{margin:0;background:var(--bg);color:var(--ink);font:300 17px/1.55 var(--sans)}
+a{color:inherit}.wrap{max-width:1560px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:.74rem;font-weight:400}
+.soft{color:var(--soft)}.fine{font-size:.78rem;color:var(--soft);margin-top:6px;line-height:1.45}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));border-top:1px solid var(--line)}
+.cell{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:30px 32px;min-width:0}
+.cell:last-child{border-right:0}.s12{grid-column:span 12;border-right:0}.s8{grid-column:span 8}.s6{grid-column:span 6}.s4{grid-column:span 4}.s3{grid-column:span 3}.s5{grid-column:span 5}.s7{grid-column:span 7}
+.hidden{display:none!important}
+.topbar{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:18px 32px;border-bottom:1px solid var(--line)}
+.topbar a{text-decoration:none}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:20px 32px;border-bottom:1px solid var(--line);background:var(--wash);text-decoration:none;color:inherit;cursor:pointer;border-left:0;border-top:0;border-right:0;width:100%;font:inherit}
+a.bar:hover,button.bar:hover{background:var(--ink);color:var(--bg)}
+.arrow{font-family:var(--mono);font-size:1.1rem}
+.name{font-size:clamp(2.8rem,7.4vw,6.4rem);font-weight:300;line-height:.98;letter-spacing:-.03em;margin:14px 0 18px}
+.lead{font-size:clamp(1.2rem,2.2vw,1.7rem);font-weight:300;line-height:1.35;margin:0 0 6px;max-width:30ch}
+.big{overflow-wrap:anywhere;font-size:clamp(2.6rem,5.2vw,4.6rem);font-weight:300;line-height:1;letter-spacing:-.03em;margin:14px 0 10px}
+.photo{padding:0;position:relative;min-height:340px;background:var(--wash)}
+.photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.05)}
+.photo .tag{position:absolute;left:24px;bottom:24px;background:var(--paper);color:#111;padding:12px 20px;border:1px solid var(--ink);text-decoration:none}
+.photo .initials{position:absolute;inset:0;display:grid;place-items:center;font-size:6rem;font-weight:200;color:var(--soft)}
+.marq{overflow:hidden;white-space:nowrap;border-bottom:1px solid var(--line);padding:22px 0}
+.marq .t{display:inline-flex;animation:slide 32s linear infinite}
+.marq span{font-size:clamp(3rem,9vw,7.5rem);font-weight:500;letter-spacing:-.02em;text-transform:uppercase;line-height:1;padding-right:.6em}
+.marq span.o{color:transparent;-webkit-text-stroke:1.5px var(--ink);font-weight:300}
+@keyframes slide{to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.marq .t{animation:none}}
+.sec{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px 16px;padding:22px 32px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.sec h2{margin:0;font-size:clamp(1.6rem,3.2vw,2.6rem);font-weight:300;letter-spacing:-.02em}
+.item{padding:20px 0;border-top:1px solid var(--line)}.item:first-child{border-top:0;padding-top:4px}
+.item p{margin:0 0 6px;font-size:1.12rem;line-height:1.4;font-weight:400}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.tagz{display:inline-block;border:1px solid var(--line);padding:2px 9px;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;margin:2px 6px 2px 0}
+.tagz.fill{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.glance p{font-size:clamp(1.15rem,1.9vw,1.5rem);line-height:1.35;margin:0;font-weight:300}
+sup a{font-family:var(--mono);font-size:.62rem;text-decoration:none;margin-left:2px;border-bottom:1px solid var(--line)}
+.filter{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.filter input[type=text]{width:100%;background:transparent;border:0;border-bottom:1px solid var(--ink);color:var(--ink);font:300 clamp(1.3rem,2.4vw,2rem)/1.3 var(--sans);padding:6px 0 10px;outline:0}
+.filter input[type=text]::placeholder{color:var(--soft)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chip{cursor:pointer}.chip input{position:absolute;opacity:0;pointer-events:none}
+.chip span{display:inline-block;border:1px solid var(--ink);padding:6px 12px;font-family:var(--mono);font-size:.72rem;letter-spacing:.05em;text-transform:uppercase}
+.chip input:checked+span{background:var(--ink);color:var(--bg)}.chip input:focus-visible+span{outline:2px solid var(--ink);outline-offset:2px}
+.chip.off span{opacity:.35;cursor:not-allowed}
+details summary{cursor:pointer;list-style:none;padding:14px 0}details summary::-webkit-details-marker{display:none}
+.note{border:1px solid var(--ink);padding:14px 18px;margin:0 0 14px;background:var(--wash)}
+input.postal{width:100%;background:transparent;border:0;border-bottom:2px solid var(--ink);color:var(--ink);font:300 clamp(2.4rem,7vw,5.5rem)/1.1 var(--sans);letter-spacing:.04em;padding:6px 0 14px;outline:0;text-transform:uppercase}
+input.postal::placeholder{color:var(--soft);opacity:.6}
+.radio{display:flex;gap:16px;align-items:center;padding:22px 32px;border-bottom:1px solid var(--line);cursor:pointer}.radio:hover{background:var(--wash)}
+.radio input{accent-color:var(--ink);width:20px;height:20px}
+@media (max-width:600px){.big{font-size:2.2rem}.name{font-size:clamp(2.4rem,13vw,3.4rem)}.cell{padding:22px 18px}.chip span{padding:5px 9px}}
+@media (max-width:900px){.s8,.s6,.s4,.s5,.s7{grid-column:span 12}.s3{grid-column:span 6}.cell{border-right:0;padding:24px 20px}.topbar,.sec,.bar,.radio{padding-left:20px;padding-right:20px}.photo{min-height:300px}
+.s3.cell:nth-child(odd){border-right:1px solid var(--line)}}
 """
 
 
-def card_page(c, postal, pick) -> bytes:
-    from .analysis.card import RECENT_VOTES  # noqa: F401
-
-    mp, p = c.mp, c.profile
-    contact = []
-    if mp.email:
-        contact.append(f'<a href="mailto:{escape(mp.email)}">{escape(mp.email)}</a>')
-    const = next((o for o in mp.offices if o.get("type") == "constituency"), None)
-    if const:
-        contact.append(escape(" ".join((const.get("postal") or "").split())) + (f" &middot; {escape(const['tel'])}" if const.get("tel") else ""))
-    links = []
-    if mp.ourcommons_url:
-        links.append(_link(mp.ourcommons_url, "Official House of Commons page"))
-    if c.slug:
-        links.append(_link(f"https://openparliament.ca/politicians/{c.slug}/", "Full voting record"))
-    photo = f'<img src="{escape(c.photo_url)}" alt="" referrerpolicy="no-referrer">' if c.photo_url else ""
-    since = f" &middot; MP since {escape(c.mp_since[:4])}" if c.mp_since else ""
-    hero = f"""<div class="hero">{photo}<div><h1>{escape(mp.name)}</h1><div>{escape(mp.party)} &middot; {escape(mp.riding)}{since}</div>
-<div class="why">{' &middot; '.join(links)}</div><div class="why">{' &middot; '.join(contact)}</div></div></div>"""
-
-    # --- stats
-    stats = []
-    if c.votes_total:
-        y, n, pr = c.ballots_cast.get("Yes", 0), c.ballots_cast.get("No", 0), c.ballots_cast.get("Paired", 0)
-        stats.append(f'<div class="stat"><b>{y} yes &middot; {n} no</b>on {c.votes_total} House votes this session ({pr} paired)</div>')
-    with_p, comparable = c.party_line
-    if comparable:
-        against = comparable - with_p
-        stats.append(f'<div class="stat"><b>{with_p} of {comparable} with their party</b>in their {len(c.recent)} most recent votes'
-                     + (f" ({against} against)" if against else "") + "</div>")
-    if c.bills:
-        stats.append(f'<div class="stat"><b>{sum(1 for b in c.bills if b.became_law)} became law</b>of {len(c.bills)} bills they sponsored (all sessions on record)</div>')
-    else:
-        stats.append('<div class="stat"><b>No sponsored bills</b>on record</div>')
-    discipline = ('<div class="note">In Canada MPs almost always vote with their party, so a voting record says less than what an MP chooses to '
-                  "speak about and sponsor. That is why the sections below separate those choices from votes.</div>")
-
-    # --- topic chips with how much the MP has done on each
-    counts: dict[str, int] = {}
-    for topics in ([x.topics for x in p.champions if x.quote] + [kv.topics for kv in c.key_votes] + list(c.bill_topics.values())):
-        for t in set(topics) - {"other"}:
-            counts[t] = counts.get(t, 0) + 1
-    tagged = bool(counts) or any(x.topics for x in p.champions)
-    boxes = "".join(
-        f'<label><input type="checkbox" name="interests" value="{escape(k)}"{"" if tagged else " disabled"}> {escape(v)}'
-        f'{f" <span class=why>({counts[k]})</span>" if counts.get(k) else ""}</label>'
-        for k, v in TOPIC_LABELS.items()
-    )
-    notag = "" if tagged else '<p class="why">Topic filtering needs ANTHROPIC_API_KEY set when the server starts.</p>'
-    filt = f"""<div class="sticky"><form id="filter" method="post" action="/opportunities" class="card">
-<input type="hidden" name="postal" value="{escape(postal)}"><input type="hidden" name="pick" value="{escape(str(pick or ''))}">
-<label for="q" style="margin-top:0">What do you care about? Filter {escape(mp.name)}'s record</label>
-<input type="text" id="q" placeholder="Search words, e.g. rent, clinics, transit" autocomplete="off">
-<div class="chips" style="margin-top:6px">{boxes}</div>{notag}
-<div class="why" id="count"></div>
-<button type="submit" id="go" disabled style="margin-top:8px">Find ways to act on these topics &rarr;</button></form></div>"""
-
-    # --- sections
-    bills_html = ""
-    for b in c.bills:
-        topics = c.bill_topics.get(b.url, [])
-        plain_txt = c.bill_plain.get(b.url) or b.title
-        badge = '<span class="chip good">became law</span>' if b.became_law else ""
-        kind = "private member's bill" if b.is_private_member_bill else "government bill"
-        bills_html += _item(topics, f"{b.number} {plain_txt} {b.title}",
-                            f"<div>{badge}<strong>{escape(plain_txt)}</strong></div>"
-                            f'<div class="why">Bill {escape(b.number)} &middot; {kind}, {escape(b.session)} &middot; {escape(b.status)} &middot; {_tags(topics)} {_link("https://openparliament.ca" + b.url)}</div>'
-                            f'<div class="fine">Official title: {escape(b.title)}</div>')
-    bills_html = bills_html or '<p class="why">No sponsored bills on record.</p>'
-
-    stmts = [x for x in p.champions if x.quote]
-    stmts_html = "".join(
-        _item(x.topics, x.text + " " + x.quote, f"<div>{escape(x.text)}</div><div class=\"why\">{escape(x.quote[:200])}{'…' if len(x.quote) > 200 else ''} &middot; {_tags(x.topics)} {_link(x.url)}</div>")
-        for x in stmts) or '<p class="why">No members\' statements on record.</p>'
-
-    def kv_row(v) -> str:
-        when = f"{escape(v.date)}" + (" &middot; passed" if v.result == "Passed" else f" &middot; {escape(v.result.lower())}")
-        stage = "final vote" if v.stage == "3rd reading" else "vote to move it forward (2nd reading)"
-        return _item(v.topics, f"{v.plain} {v.legal_title}",
-                     f"<div><strong>{escape(v.plain)}</strong></div>"
-                     f'<div class="why">Bill {escape(v.number)} &middot; {stage} &middot; {when} &middot; {_tags(v.topics)} {_link("https://openparliament.ca" + v.vote_url, "vote record")}</div>'
-                     f'<div class="fine">Official title: {escape(v.legal_title)}</div>')
-
-    def kv_list(vs) -> str:
-        if not vs:
-            return '<p class="why">None on record.</p>'
-        head = "".join(kv_row(v) for v in vs[:6])
-        rest = "".join(kv_row(v) for v in vs[6:])
-        return head + (f"<details><summary>Show {len(vs) - 6} more</summary>{rest}</details>" if rest else "")
-
-    def refs(ids) -> str:
-        return "".join(f' <sup><a href="{escape(c.ref_links[i][1])}" target="_blank" rel="noopener noreferrer" title="{escape(c.ref_links[i][0])}">[{n}]</a></sup>'
-                       for n, i in enumerate(ids, 1) if i in c.ref_links)
-
-    if c.overview:
-        overview_html = ('<div class="card"><h2 style="margin-top:0">At a glance</h2>'
-                         + "".join(f"<p>{escape(x['text'])}{refs(x['refs'])}</p>" for x in c.overview)
-                         + '<div class="fine">Written by AI from the linked records only. Click a [number] to see the source.</div></div>')
-    else:
-        overview_html = ""
-
-    votes_html = (
-        f'<h2>Bills they voted for</h2><div class="why">Votes that decided a bill (second or third reading). '
-        f"They also took part in {c.other_votes} other votes on amendments and procedure, not described here.</div>{kv_list(c.backed)}"
-        f'<h2>Bills they voted against</h2><div class="why">"Against" means they voted No on that bill. It does not mean they oppose everything in it, and MPs usually follow their party.</div>{kv_list(c.opposed)}'
-        '<div class="fine">Plain-language descriptions are written by AI from Parliament\'s official summary of each bill; the official title is shown under each one.</div>'
-    ) if c.key_votes else '<h2>How they voted</h2><p class="why">No bill-deciding votes on record this session.</p>'
-
-    roles = "".join(f"<li>{escape(x.text)}</li>" for x in p.responsible_for)
-    other = ", ".join(f"{escape(k)} ({n})" for k, n in p.assigned_activity.most_common(5))
-    notes = "".join(f'<div class="note">{escape(n)}</div>' for n in c.notes + p.notes)
-
-    body = f"""{hero}<div class="stats">{"".join(stats)}</div>{overview_html}{discipline}{notes}{filt}
-{votes_html}
-<h2>Bills they've sponsored</h2><div class="why">Bills this MP put forward themselves.</div>{bills_html}
-<h2>What they choose to speak about</h2><div class="why">Members' statements are 60-second speeches each MP picks the subject of.</div>{stmts_html}
-<h2>Roles and committees</h2><div class="why">Assigned by position or party, so weighted lightly as a sign of personal interest.</div><ul>{roles}</ul>
-{f'<div class="why">Other activity: {other}</div>' if other else ''}
-<p style="margin-top:28px"><a href="/">&larr; Look up another postal code</a></p><script>{FILTER_JS}</script>"""
-    return page(f"{mp.name}", body)
+def page(title: str, body: str) -> bytes:
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<meta name="referrer" content="no-referrer"><title>{escape(title)}</title><style>{CSS}</style></head>'
+            f'<body><div class="wrap">{body}</div></body></html>').encode()
 
 
-def results(r: service.Ranked, postal, interests, pick) -> bytes:
-    cards = []
-    for n, o in enumerate(r.shown[:12], 1):
-        reasons = escape("; ".join(o.reasons))
-        deadline = f" &middot; deadline {o.deadline}" if o.deadline else ""
-        actions = ""
-        if o.kind in ("committee_study", "bill"):
-            actions += f'<form method="post" action="/letter" style="display:inline">{hidden(postal, interests, pick, {"item": n})}' \
-                       f'<details><summary>Draft a letter to {escape(r.mp.name)}</summary><label>Why does this matter to you? (your own words)</label>' \
-                       f'<textarea name="why"></textarea><button type="submit">Draft letter</button></details></form>'
-        if o.kind == "committee_study":
-            actions += f'<form method="post" action="/brief" style="margin-top:8px">{hidden(postal, interests, pick, {"item": n})}<button class="alt" type="submit">How to submit a brief</button></form>'
-        cards.append(f"""<div class="card"><div><span class="score">{o.score}</span> &nbsp;<strong>{escape(o.title)}</strong></div>
-<div class="why">{escape(o.kind.replace('_', ' '))}; {escape(o.detail)}{deadline}</div>
-<p class="why"><strong>Ranked high because:</strong> {reasons}</p>
-<p><strong>Do this:</strong> {escape(o.action)}</p>
-<p><a href="{escape(o.url)}" target="_blank" rel="noopener noreferrer">Official page</a></p>{actions}</div>""")
-    body = f'<h1>Opportunities for {escape(r.mp.name)}</h1><p class="sub">{escape(r.mp.party)}, {escape(r.mp.riding)}</p>'
-    body += "".join(cards) or '<div class="note">Nothing open matches those interests right now. Try other interests.</div>'
-    body += f'<form method="post" action="/mp">{hidden(postal, [], pick)}<button class="alt" type="submit">&larr; Back to {escape(r.mp.name)}</button></form>'
-    return page("Opportunities", body)
+def marquee(word: str) -> str:
+    unit = "".join(f'<span>{escape(word)}</span><span class="o">{escape(word)}</span>' for _ in range(2))
+    return f'<div class="marq" aria-hidden="true"><div class="t">{unit}{unit}</div></div>'
+
+
+def topbar(right: str = "") -> str:
+    return f'<div class="topbar mono"><a href="/">MP Card</a><span class="soft">{right}</span></div>'
+
+
+def link(url: str, label: str = "Source") -> str:
+    return f'<a class="mono" href="{escape(url)}" target="_blank" rel="noopener noreferrer">{escape(label)} &#8599;</a>'
+
+
+# ---------------------------------------------------------------- home / split riding
+def home(msg: str = "", postal: str = "") -> bytes:
+    err = f'<div class="note mono">{escape(msg)}</div>' if msg else ""
+    return page("MP Card", f"""{topbar("Meet your MP")}
+<div class="grid"><div class="cell s12" style="padding-top:56px;padding-bottom:56px">
+<div class="mono soft">Your MP, as a baseball card</div>
+<h1 class="name" style="font-size:clamp(3.4rem,10vw,9rem)">Meet<br>your MP.</h1>
+<p class="lead">What they vote for, what they speak up about, what they put their name on. In plain words, with receipts.</p></div></div>
+<form method="post" action="/mp"><div class="grid">
+<div class="cell s8">{err}<label for="postal" class="mono soft">Where do you live? Postal code</label>
+<input class="postal" id="postal" name="postal" value="{escape(postal)}" placeholder="M5V 3L9" required maxlength="10" autocomplete="off" autofocus>
+<div class="fine">The first lookup for an MP can take a minute or two while it reads public records. After that it is fast. Your postal code is never stored or logged.</div></div>
+<div class="cell s4" style="padding:0"><button class="bar mono" type="submit" style="height:100%;min-height:120px;border-bottom:0;font-size:.9rem">Find my MP <span class="arrow">&#8599;</span></button></div></div></form>
+{marquee("Know your MP")}
+<div class="grid"><div class="cell s12 mono soft" style="border-bottom:0">Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same card.</div></div>""")
 
 
 def choose_riding(e: service.SplitPostcode, postal) -> bytes:
     opts = "".join(
-        f'<label><input type="radio" name="pick" value="{i}" required> {escape(m.name)} ({escape(m.party)}), {escape(m.riding)}</label>'
-        for i, m in enumerate(e.mps, 1)
-    )
-    return page("Choose your riding", f'<h1>Which riding are you in?</h1><p class="sub">{escape(str(e))}</p>'
-                f'<form method="post" action="/mp"><input type="hidden" name="postal" value="{escape(postal)}">{opts}<br><button type="submit">Continue</button></form>')
+        f'<label class="radio"><input type="radio" name="pick" value="{i}" required><span><strong style="font-weight:400">{escape(m.name)}</strong>'
+        f' <span class="soft">&middot; {escape(m.party)} &middot; {escape(m.riding)}</span></span></label>'
+        for i, m in enumerate(e.mps, 1))
+    return page("Choose your riding", f"""{topbar("One more step")}
+<div class="grid"><div class="cell s12"><div class="mono soft">Split postal code</div><h1 class="name">Which riding<br>are you in?</h1><p class="lead">{escape(str(e))}</p></div></div>
+<form method="post" action="/mp"><input type="hidden" name="postal" value="{escape(postal)}">{opts}
+<button class="bar mono" type="submit">Continue <span class="arrow">&#8599;</span></button></form>""")
 
 
-def text_page(title: str, text: str, editable: bool = False) -> bytes:
-    if editable:
-        body = f'<h1>{escape(title)}</h1><div class="note">This is a starting point. Rewrite it in your own words (you can edit it right here), fill in the [brackets], and send it yourself. Nothing is sent from this page.</div><textarea style="min-height:420px" spellcheck="true">{escape(text)}</textarea>'
+# ---------------------------------------------------------------- the card
+def _topics_attr(topics) -> str:
+    return escape(" ".join(t for t in topics if t != "other"))
+
+
+def _tags(topics) -> str:
+    return "".join(f'<span class="tagz">{escape(TOPIC_LABELS.get(t, t))}</span>' for t in topics if t != "other")
+
+
+FILTER_JS = """
+const form=document.getElementById('filter'),q=document.getElementById('q'),items=[...document.querySelectorAll('[data-item]')],
+ boxes=[...form.querySelectorAll('input[name=topic]:not(:disabled)')],count=document.getElementById('count');
+function apply(){const want=boxes.filter(b=>b.checked).map(b=>b.value),text=q.value.trim().toLowerCase();let n=0;
+ items.forEach(it=>{const t=(it.dataset.topics||'').split(' ').filter(Boolean);
+  const ok=(!want.length||want.some(w=>t.includes(w)))&&(!text||it.dataset.text.includes(text));it.classList.toggle('hidden',!ok);if(ok)n++;});
+ count.textContent=(want.length||text)?('Showing '+n+' of '+items.length):'';}
+form.addEventListener('input',apply);form.addEventListener('submit',e=>e.preventDefault());apply();
+"""
+
+
+def identity_line(c) -> str:
+    """One line on who this MP is: what they choose to talk about, plus where they sit."""
+    p = c.profile
+    counts: dict[str, int] = {}
+    for x in p.champions:
+        for t in x.topics:
+            if t != "other":
+                counts[t] = counts.get(t, 0) + 1
+    for topics in c.bill_topics.values():
+        for t in topics:
+            if t != "other":
+                counts[t] = counts.get(t, 0) + 1
+    top = [TOPIC_LABELS.get(t, t) for t, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:2]]
+    codes = [m.group(1) for x in p.responsible_for if (m := re.search(r"\(([A-Z]{3,6})\)$", x.text))]
+    parts = []
+    if top:
+        parts.append("Chooses to speak about " + " and ".join(top).lower())
+    if codes:
+        parts.append("Sits on " + ", ".join(codes))
+    return (". ".join(parts) + ".") if parts else ""
+
+
+def card_page(c, postal, pick) -> bytes:
+    mp, p = c.mp, c.profile
+
+    def item_attrs(topics, text):
+        return f'data-item data-topics="{_topics_attr(topics)}" data-text="{escape(text.lower())}"'
+
+    # --- hero
+    if c.photo_url:
+        photo = f'<img src="{escape(c.photo_url)}" alt="" referrerpolicy="no-referrer">'
     else:
-        body = f"<h1>{escape(title)}</h1><pre>{linkify(text)}</pre>"
-    return page(title, body + '<p><a href="javascript:history.back()">&larr; Back to results</a></p>')
+        photo = f'<div class="initials">{escape("".join(w[0] for w in mp.name.split()[:2]))}</div>'
+    tag = f'<a class="tag mono" href="{escape(mp.ourcommons_url)}" target="_blank" rel="noopener noreferrer">Official page &#8599;</a>' if mp.ourcommons_url else ""
+    ident = identity_line(c)
+    since = f"MP since {escape(c.mp_since[:4])}" if c.mp_since else ""
+    notes = "".join(f'<div class="note" style="margin-top:18px">{escape(n)}</div>' for n in c.notes + p.notes)
+    contact = []
+    if mp.email:
+        contact.append(f'<a class="bar mono" href="mailto:{escape(mp.email)}">Email {escape(mp.email)} <span class="arrow">&#8599;</span></a>')
+    if c.slug:
+        contact.append(f'<a class="bar mono" href="https://openparliament.ca/politicians/{escape(c.slug)}/" target="_blank" rel="noopener noreferrer">Full voting record <span class="arrow">&#8599;</span></a>')
+    const = next((o for o in mp.offices if o.get("type") == "constituency"), None)
+    office = ""
+    if const:
+        addr = escape(" ".join((const.get("postal") or "").split()))
+        tel = f" &middot; {escape(const['tel'])}" if const.get("tel") else ""
+        office = f'<div class="fine" style="margin-top:14px">Constituency office: {addr}{tel}</div>'
+    hero = f"""{topbar("MP card")}
+<div class="grid"><div class="cell photo s4">{photo}{tag}</div>
+<div class="cell s8" style="padding:0;display:flex;flex-direction:column;justify-content:space-between">
+<div style="padding:30px 32px 24px"><div class="mono soft">Your MP &middot; {escape(mp.party)} &middot; {escape(mp.riding)}</div>
+<h1 class="name">{escape(mp.name)}</h1>{f'<p class="lead">{escape(ident)}</p>' if ident else ''}{notes}{office}</div>
+<div>{"".join(contact)}</div></div></div>"""
+
+    # --- stat boxes
+    boxes = []
+    if c.mp_since:
+        yrs = max(0.0, (date.today() - date.fromisoformat(c.mp_since)).days / 365.25)
+        boxes.append(("Time in office", f"{yrs:.0f}<span style='font-size:.4em'> yrs</span>" if yrs >= 1.5 else "&lt;2<span style='font-size:.4em'> yrs</span>", since))
+    if c.votes_total:
+        y, n = c.ballots_cast.get("Yes", 0), c.ballots_cast.get("No", 0)
+        boxes.append(("House votes", f"{y}<span style='font-size:.4em'> yes</span> {n}<span style='font-size:.4em'> no</span>", f"of {c.votes_total} this session"))
+    wp, comparable = c.party_line
+    if comparable:
+        boxes.append(("With their party", f"{wp}<span style='font-size:.4em'> of {comparable}</span>", f"in their {len(c.recent)} most recent votes"))
+    law = sum(1 for b in c.bills if b.became_law)
+    boxes.append(("Bills sponsored", f"{len(c.bills)}", f"{law} became law" if c.bills else "none on record"))
+    stat_html = "".join(f'<div class="cell s3"><div class="mono soft">{escape(lbl)}</div><div class="big">{val}</div><div class="fine">{escape(sub)}</div></div>' for lbl, val, sub in boxes)
+
+    # --- at a glance
+    def refs(ids) -> str:
+        return "".join(f'<sup><a href="{escape(c.ref_links[i][1])}" target="_blank" rel="noopener noreferrer" title="{escape(c.ref_links[i][0])}">{n}</a></sup>'
+                       for n, i in enumerate(ids, 1) if i in c.ref_links)
+
+    glance = ""
+    if c.overview:
+        span = "s6" if len(c.overview) > 1 else "s12"
+        glance = (f'<div class="sec"><h2>At a glance</h2><span class="mono soft">AI-written from the linked records</span></div>'
+                  f'<div class="grid glance">' + "".join(f'<div class="cell {span if i < 2 else "s6"}"><p>{escape(x["text"])}{refs(x["refs"])}</p></div>' for i, x in enumerate(c.overview))
+                  + '</div>')
+
+    # --- filter
+    counts: dict[str, int] = {}
+    for topics in ([x.topics for x in p.champions if x.quote] + [kv.topics for kv in c.key_votes] + list(c.bill_topics.values())):
+        for t in set(topics) - {"other"}:
+            counts[t] = counts.get(t, 0) + 1
+    tagged = bool(counts)
+    chips = "".join(
+        f'<label class="chip{"" if tagged else " off"}"><input type="checkbox" name="topic" value="{escape(k)}"{"" if tagged else " disabled"}>'
+        f'<span>{escape(v)}{f" &middot; {counts[k]}" if counts.get(k) else ""}</span></label>' for k, v in TOPIC_LABELS.items())
+    notag = "" if tagged else '<div class="fine">Topic filters need ANTHROPIC_API_KEY set when the server starts. Search by words still works.</div>'
+    filt = f"""<div class="filter"><form id="filter" class="cell s12" style="border-bottom:0">
+<label for="q" class="mono soft">What do you care about? Filter {escape(mp.name)}'s record</label>
+<input type="text" id="q" placeholder="Try: rent, clinics, transit&hellip;" autocomplete="off">
+<div class="chips">{chips}</div>{notag}<div class="mono soft" id="count" style="margin-top:12px;min-height:1em"></div></form></div>"""
+
+    # --- votes
+    def kv_row(v) -> str:
+        stage = "Final vote" if v.stage == "3rd reading" else "Moved forward (2nd reading)"
+        result = "Passed" if v.result == "Passed" else v.result
+        return (f'<div class="item" {item_attrs(v.topics, v.plain + " " + v.legal_title)}><p>{escape(v.plain)}</p>'
+                f'<div class="meta"><span class="mono soft">Bill {escape(v.number)} &middot; {stage} &middot; {escape(v.date)} &middot; {escape(result)}</span>'
+                f'{link("https://openparliament.ca" + v.vote_url, "Vote record")}</div><div>{_tags(v.topics)}</div>'
+                f'<div class="fine">Official title: {escape(v.legal_title)}</div></div>')
+
+    def kv_col(title: str, sub: str, vs) -> str:
+        body = "".join(kv_row(v) for v in vs[:5]) or '<div class="soft">None on record.</div>'
+        rest = "".join(kv_row(v) for v in vs[5:])
+        more = f'<details><summary class="mono">Show {len(vs) - 5} more &#8599;</summary>{rest}</details>' if rest else ""
+        return (f'<div class="cell s6"><div class="mono soft">{escape(title)} &middot; {len(vs)}</div>'
+                f'<div class="fine" style="margin:6px 0 18px">{escape(sub)}</div>{body}{more}</div>')
+
+    if c.key_votes:
+        votes = (f'<div class="sec"><h2>How they voted</h2><span class="mono soft">Votes that decided a bill &middot; {c.other_votes} other votes on amendments and procedure not shown</span></div>'
+                 f'<div class="grid">{kv_col("Voted for", "Yes on the bill.", c.backed)}'
+                 f'{kv_col("Voted against", "No on the bill. It does not mean they oppose everything in it, and MPs usually follow their party.", c.opposed)}</div>'
+                 '<div class="grid"><div class="cell s12 fine" style="border-bottom:1px solid var(--line)">Plain-language descriptions are written by AI from Parliament\'s official summary of each bill. The official title is under each one.</div></div>')
+    else:
+        votes = '<div class="sec"><h2>How they voted</h2></div><div class="grid"><div class="cell s12 soft">No bill-deciding votes on record this session.</div></div>'
+
+    # --- sponsored bills
+    bill_cells = ""
+    for b in c.bills:
+        topics = c.bill_topics.get(b.url, [])
+        txt = c.bill_plain.get(b.url) or b.title
+        law_tag = '<span class="tagz fill">Became law</span>' if b.became_law else ""
+        bill_cells += (f'<div class="cell s6" {item_attrs(topics, b.number + " " + txt + " " + b.title)}><p style="margin:0 0 8px;font-size:1.2rem;font-weight:400;line-height:1.35">{escape(txt)}</p>'
+                       f'<div class="meta"><span class="mono soft">Bill {escape(b.number)} &middot; {escape(b.session)} &middot; {escape(b.status)}</span>{link("https://openparliament.ca" + b.url, "Bill")}</div>'
+                       f'<div>{law_tag}{_tags(topics)}</div><div class="fine">Official title: {escape(b.title)}</div></div>')
+    bills = ('<div class="sec"><h2>Bills they put forward</h2><span class="mono soft">Sponsored by this MP</span></div>'
+             f'<div class="grid">{bill_cells}</div>') if bill_cells else ""
+
+    # --- speaks about
+    stmt_cells = ""
+    for x in [x for x in p.champions if x.quote]:
+        q = x.quote[:230] + ("…" if len(x.quote) > 230 else "")
+        title = x.text.split(": ", 1)[-1]
+        date_ = re.search(r"\((\d{4}-\d{2}-\d{2})\)", x.text)
+        stmt_cells += (f'<div class="cell s4" {item_attrs(x.topics, x.text + " " + x.quote)}><div class="mono soft">{escape(date_.group(1) if date_ else "Statement")}</div>'
+                       f'<p style="margin:10px 0;font-size:1.25rem;font-weight:400;line-height:1.25">{escape(title)}</p>'
+                       f'<div class="fine" style="font-size:.88rem">{escape(q)}</div><div style="margin-top:10px">{_tags(x.topics)}</div><div style="margin-top:8px">{link(x.url, "Read it")}</div></div>')
+    speaks = ('<div class="sec"><h2>What they choose to speak about</h2><span class="mono soft">60-second statements the MP picks the subject of</span></div>'
+              f'<div class="grid">{stmt_cells or "<div class=\'cell s12 soft\'>No members&#x27; statements on record.</div>"}</div>')
+
+    # --- roles
+    role_cells = "".join(f'<div class="cell s4"><div class="mono soft">Role</div><p style="margin:8px 0 0;font-size:1.05rem;font-weight:400">{escape(x.text)}</p></div>' for x in p.responsible_for)
+    other = ", ".join(f"{escape(k)} ({n})" for k, n in p.assigned_activity.most_common(4))
+    roles = ('<div class="sec"><h2>Roles &amp; committees</h2><span class="mono soft">Assigned by position or party</span></div>'
+             f'<div class="grid">{role_cells}</div>' + (f'<div class="grid"><div class="cell s12 fine" style="border-bottom:1px solid var(--line)">Other activity: {other}</div></div>' if other else ""))
+
+    footer = (f'{marquee("Know your MP")}<a class="bar mono" href="/">Look up another postal code <span class="arrow">&#8599;</span></a>'
+              '<div class="grid"><div class="cell s12 fine" style="border-bottom:0">In Canada MPs almost always vote with their party, so a voting record says less than what an MP chooses to speak about and sponsor. '
+              'Sources: openparliament.ca, ourcommons.ca, parl.ca. Descriptions are AI-written from those records; follow the links to check.</div></div>')
+
+    body = f'{hero}<div class="grid">{stat_html}</div>{glance}{filt}{votes}{bills}{speaks}{roles}{footer}<script>{FILTER_JS}</script>'
+    return page(mp.name, body)
 
 
+# ---------------------------------------------------------------- server
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # never log requests: they contain postal codes
         pass
@@ -286,22 +338,12 @@ class Handler(BaseHTTPRequestHandler):
         length = min(int(self.headers.get("Content-Length") or 0), 20000)
         form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
         one = lambda k, d="": (form.get(k) or [d])[0].strip()
-        postal, interests = one("postal"), form.get("interests", [])
+        postal = one("postal")
         pick = int(one("pick")) if one("pick").isdigit() else None
-        try:
-            if self.path == "/mp":
-                return self._send(card_page(service.card(postal, pick), postal, pick))
-            if not interests:
-                raise service.UserError("Pick at least one thing you care about.")
-            r = service.rank(postal, ",".join(interests), pick)
-            if self.path == "/opportunities":
-                return self._send(results(r, postal, interests, pick))
-            n = int(one("item", "0") or 0)
-            if self.path == "/letter":
-                return self._send(text_page("Draft letter", service.letter_text(r, n, one("why")), editable=True))
-            if self.path == "/brief":
-                return self._send(text_page("How to submit a brief", service.brief_text(r, n)))
+        if self.path != "/mp":
             return self._send(page("Not found", "<h1>Not found</h1>"), 404)
+        try:
+            return self._send(card_page(service.card(postal, pick), postal, pick))
         except service.SplitPostcode as e:
             return self._send(choose_riding(e, postal))
         except service.UserError as e:

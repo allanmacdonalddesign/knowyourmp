@@ -32,13 +32,15 @@ def _card():
 
 def test_card_page_renders_filterable_items_and_escapes():
     html = web.card_page(_card(), "M5V3L9", None).decode()
-    assert 'data-topics="housing"' in html and 'action="/opportunities"' in html
+    assert 'data-topics="housing"' in html and 'name="topic"' in html
     body = html.split("</style>")[1].split("<script>")[0]
     assert "<script>" not in body and "<i>" not in body  # injected text is escaped
     assert "&lt;script&gt;" in html and "&lt;b&gt;housing" in html and "Builds &lt;i&gt;homes" in html
-    assert "1 of 1 with their party" in html
-    assert "Bills they voted for" in html and "At a glance" in html and 'title="Bill C-1 vote"' in html
+    assert "With their party" in html and "1<span style='font-size:.4em'> of 1" in html
+    assert "Voted for" in html and "At a glance" in html and 'title="Bill C-1 vote"' in html
     assert "4 other votes" in html
+    text = html.split("</style>")[1].lower()
+    assert "opportunit" not in text and "draft a letter" not in text
 
 
 def test_overview_drops_claims_without_valid_sources():
@@ -61,3 +63,9 @@ def test_key_votes_only_bill_deciding_and_prefer_third_reading():
     ballots["/votes/45-1/1/"] = "No"
     picked, other = stance.select_key_votes(votes, ballots)
     assert [(v.number, b) for v, b in picked] == [(4, "Yes"), (1, "No")] and other == 3
+
+
+def test_identity_line_uses_chosen_topics_and_committees():
+    c = _card()
+    c.profile.responsible_for.append(Claim("Member, Standing Committee on Transport (TRAN)", "u"))
+    assert web.identity_line(c) == "Chooses to speak about housing. Sits on TRAN."
