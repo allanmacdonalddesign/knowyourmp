@@ -21,10 +21,10 @@ TOPIC_LABELS = {
 }
 
 CSS = """
-:root{--bg:#e7f1ec;--ink:#1c4a3a;--soft:#4b7566;--line:#2d7a62;--wash:rgba(255,255,255,.45);--paper:#fff;
+:root{--bg:#fff;--ink:#0a0a0a;--soft:#666;--line:#0a0a0a;--wash:#f1f1f1;--paper:#fff;--red:#d80621;
 --sans:"Manrope","Inter",ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
 --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#0e1b16;--ink:#bfe6d3;--soft:#85b5a0;--line:#2c6b55;--wash:rgba(255,255,255,.05);--paper:#0e1b16}}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--ink:#fff;--soft:#9b9b9b;--line:#d8d8d8;--wash:#141414;--paper:#000;--red:#ff3347}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{overflow-wrap:break-word}
 body{margin:0;background:var(--bg);color:var(--ink);font:300 17px/1.55 var(--sans)}
 a{color:inherit}.wrap{max-width:1560px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)}
@@ -44,7 +44,7 @@ a.bar:hover,button.bar:hover{background:var(--ink);color:var(--bg)}
 .big{overflow-wrap:anywhere;font-size:clamp(2.6rem,5.2vw,4.6rem);font-weight:300;line-height:1;letter-spacing:-.03em;margin:14px 0 10px}
 .photo{padding:0;position:relative;min-height:340px;background:var(--wash)}
 .photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:grayscale(1) contrast(1.05)}
-.photo .tag{position:absolute;left:24px;bottom:24px;background:var(--paper);color:#111;padding:12px 20px;border:1px solid var(--ink);text-decoration:none}
+.photo .tag{position:absolute;left:24px;bottom:24px;background:var(--paper);color:var(--ink);padding:12px 20px;border:1px solid var(--ink);text-decoration:none}
 .photo .initials{position:absolute;inset:0;display:grid;place-items:center;font-size:6rem;font-weight:200;color:var(--soft)}
 .marq{overflow:hidden;white-space:nowrap;border-bottom:1px solid var(--line);padding:22px 0}
 .marq .t{display:inline-flex;animation:slide 32s linear infinite}
@@ -78,6 +78,17 @@ input.postal::placeholder{color:var(--soft);opacity:.6}
 @media (max-width:600px){.big{font-size:2.2rem}.name{font-size:clamp(2.4rem,13vw,3.4rem)}.cell{padding:22px 18px}.chip span{padding:5px 9px}}
 @media (max-width:900px){.s8,.s6,.s4,.s5,.s7{grid-column:span 12}.s3{grid-column:span 6}.cell{border-right:0;padding:24px 20px}.topbar,.sec,.bar,.radio{padding-left:20px;padding-right:20px}.photo{min-height:300px}
 .s3.cell:nth-child(odd){border-right:1px solid var(--line)}}
+::selection{background:var(--red);color:#fff}
+a:hover{color:var(--red)}
+a.bar:hover,button.bar:hover,.radio:hover{background:var(--red);color:#fff}
+.photo .tag:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.chip:hover span{border-color:var(--red);color:var(--red)}.chip:hover input:checked+span{background:var(--red);border-color:var(--red);color:#fff}
+.chip input:focus-visible+span,a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.cell[data-item]:hover p,.item:hover>p{color:var(--red)}
+details summary:hover,sup a:hover{color:var(--red)}sup a:hover{border-color:var(--red)}
+.filter input[type=text]:focus,input.postal:focus{border-bottom-color:var(--red)}
+.postal:focus-visible,.filter input[type=text]:focus-visible{outline:0}
+.red{color:var(--red)}
 """
 
 
@@ -106,7 +117,7 @@ def home(msg: str = "", postal: str = "") -> bytes:
     return page("MP Card", f"""{topbar("Meet your MP")}
 <div class="grid"><div class="cell s12" style="padding-top:56px;padding-bottom:56px">
 <div class="mono soft">Your MP, as a baseball card</div>
-<h1 class="name" style="font-size:clamp(3.4rem,10vw,9rem)">Meet<br>your MP.</h1>
+<h1 class="name" style="font-size:clamp(3.4rem,10vw,9rem)">Meet<br>your MP<span class="red">.</span></h1>
 <p class="lead">What they vote for, what they speak up about, what they put their name on. In plain words, with receipts.</p></div></div>
 <form method="post" action="/mp"><div class="grid">
 <div class="cell s8">{err}<label for="postal" class="mono soft">Where do you live? Postal code</label>
