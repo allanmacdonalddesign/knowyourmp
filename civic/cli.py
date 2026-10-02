@@ -1,13 +1,9 @@
-import os
-import re
-
 import typer
 
-from . import cache
-from .analysis import classify, profile as prof
+from . import cache, service
+from .analysis import profile as prof
 from .http import Fetcher
 from .sources import openparliament as op
-from .sources import ourcommons_member, represent
 
 app = typer.Typer(help="Civic Leverage Tool")
 
@@ -17,32 +13,18 @@ def main():
     """Civic Leverage Tool."""
 
 
-def _choose_mp(mps: list[represent.MP], pick: int | None) -> represent.MP:
-    if len(mps) == 1:
-        return mps[0]
-    typer.echo("This postal code covers more than one riding. Re-run with --pick N, or use a full address:")
-    for i, m in enumerate(mps, 1):
-        typer.echo(f"  {i}. {m.name} ({m.party}), {m.riding}")
-    if pick is None or not 1 <= pick <= len(mps):
+def _run(fn, *args, **kwargs):
+    """Run a service call, turning user-fixable problems into plain messages."""
+    try:
+        return fn(*args, **kwargs)
+    except service.SplitPostcode as e:
+        typer.echo("This postal code covers more than one riding. Re-run with --pick N:")
+        for i, m in enumerate(e.mps, 1):
+            typer.echo(f"  {i}. {m.name} ({m.party}), {m.riding}")
         raise typer.Exit(2)
-    return mps[pick - 1]
-
-
-def _classifier(db):
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
-    import anthropic
-
-    return classify.Classifier(anthropic.Anthropic(), cache.ClassificationCache(db))
-
-
-def _mp_context(db, fetcher, mp):
-    slug = op.find_slug(fetcher, mp.name)
-    roles = ourcommons_member.fetch_roles(fetcher, mp.ourcommons_url) if mp.ourcommons_url else None
-    speeches = op.speeches(fetcher, slug) if slug else []
-    bills = op.sponsored_bills(fetcher, slug) if slug else []
-    p = prof.build_profile(mp, slug, roles, speeches, bills, _classifier(db))
-    return p, slug, roles
+    except service.UserError as e:
+        typer.echo(str(e))
+        raise typer.Exit(1)
 
 
 @app.command("profile")
@@ -50,16 +32,8 @@ def profile_cmd(postal_code: str, pick: int = typer.Option(None, help="Choose a 
     """Print the MP for a postal code with a cited profile."""
     db = cache.connect()
     fetcher = Fetcher(cache.HttpCache(db))
-    try:
-        mps = represent.lookup(fetcher, postal_code)
-    except represent.InvalidPostalCode as e:
-        typer.echo(str(e))
-        raise typer.Exit(1)
-    if not mps:
-        typer.echo("No MP found for that postal code.")
-        raise typer.Exit(1)
-    mp = _choose_mp(mps, pick)
-    p, slug, _ = _mp_context(db, fetcher, mp)
+    mp = _run(service.find_mp, fetcher, postal_code, pick)
+    p, slug, _ = service.mp_context(db, fetcher, mp)
     _render(p, slug)
 
 
@@ -83,58 +57,6 @@ def _render(p: prof.Profile, slug):
         typer.echo(f"\nNote: {n}")
 
 
-def _rank(postal_code, interests, pick, show_all):
-    """Shared by opportunities / letter / brief so item numbers always match."""
-    from datetime import date
-
-    from .analysis.interests import resolve
-    from .ranking import opportunities as opp
-    from .sources import committees, legisinfo, petitions
-
-    try:
-        wanted = resolve(interests)
-    except ValueError as e:
-        typer.echo(str(e))
-        raise typer.Exit(1)
-    db = cache.connect()
-    fetcher = Fetcher(cache.HttpCache(db))
-    clf = _classifier(db)
-    if clf is None:
-        typer.echo("Set ANTHROPIC_API_KEY: opportunities are matched to your interests by topic tagging.")
-        raise typer.Exit(1)
-    try:
-        mps = represent.lookup(fetcher, postal_code)
-    except represent.InvalidPostalCode as e:
-        typer.echo(str(e))
-        raise typer.Exit(1)
-    if not mps:
-        typer.echo("No MP found for that postal code.")
-        raise typer.Exit(1)
-    mp = _choose_mp(mps, pick)
-    profile, _, roles = _mp_context(db, fetcher, mp)
-    mp_topics = set(profile.topic_counts)
-    my_committees = {code for code, _ in roles.committees} if roles else set()
-    today = date.today()
-
-    scored: list[opp.Opportunity] = []
-    studies = committees.fetch_open_studies(fetcher)
-    study_bills = {m.group(0) for s in studies if (m := re.search(r"Bill [CS]-\d+", s.title))}
-    for s in studies:
-        scored.append(opp.score(opp.from_study(s, clf.classify(s.url, s.title)), wanted, mp_topics, my_committees, today, s=s))
-    for b in legisinfo.fetch_active(fetcher):
-        if f"Bill {b.number}" in study_bills:
-            continue  # already shown as an open committee study
-        scored.append(opp.score(opp.from_bill(b, clf.classify(b.url, b.title)), wanted, mp_topics, my_committees, today, b=b))
-    for p in petitions.fetch_open(fetcher):
-        text = petitions.fetch_text(fetcher, p)
-        topics = clf.classify(p.url, f"{p.category}. {', '.join(p.keywords)}. {text}")
-        scored.append(opp.score(opp.from_petition(p, text, topics), wanted, mp_topics, my_committees, today, p=p))
-
-    shown = [o for o in scored if o.score >= 0 and (show_all or set(o.topics) & wanted)]
-    shown.sort(key=lambda o: o.score, reverse=True)
-    return mp, profile, roles, shown, fetcher, db
-
-
 @app.command("opportunities")
 def opportunities_cmd(
     postal_code: str,
@@ -144,25 +66,18 @@ def opportunities_cmd(
     show_all: bool = typer.Option(False, "--all", help="Include opportunities that don't match your interests"),
 ):
     """Ranked, explained opportunities to act on, for your MP and interests."""
-    mp, _, _, shown, _, _ = _rank(postal_code, interests, pick, show_all)
-    typer.echo(f"\nOpportunities for {mp.name} ({mp.riding})")
-    if not shown:
+    r = _run(service.rank, postal_code, interests, pick, show_all)
+    typer.echo(f"\nOpportunities for {r.mp.name} ({r.mp.riding})")
+    if not r.shown:
         typer.echo("Nothing open matches those interests right now. Try --all or other interests.")
-    for i, o in enumerate(shown[:limit], 1):
+    for i, o in enumerate(r.shown[:limit], 1):
         typer.echo(f"\n{i}. [{o.score}] {o.title}")
         typer.echo(f"   {o.kind.replace('_', ' ')}; {o.detail}" + (f"; deadline {o.deadline}" if o.deadline else ""))
         typer.echo("   Ranked high because: " + "; ".join(o.reasons))
         typer.echo(f"   Do this: {o.action}")
         typer.echo(f"   Link: {o.url}")
-    if shown:
+    if r.shown:
         typer.echo("\nNext: `letter` or `brief` with the same postal code and --interests, plus --item N.")
-
-
-def _item(shown, n):
-    if not 1 <= n <= len(shown):
-        typer.echo(f"--item must be between 1 and {len(shown)} (numbers match the `opportunities` list).")
-        raise typer.Exit(1)
-    return shown[n - 1]
 
 
 @app.command("brief")
@@ -173,19 +88,8 @@ def brief_cmd(
     pick: int = typer.Option(None),
 ):
     """Guide to submitting a brief to a committee: real deadline, limits, conditions and form."""
-    from datetime import date
-
-    from .actions import brief_guide
-    from .sources import committees
-
-    mp, _, _, shown, fetcher, _ = _rank(postal_code, interests, pick, False)
-    o = _item(shown, item)
-    if o.kind != "committee_study":
-        typer.echo(f"Item {item} is a {o.kind.replace('_', ' ')}, not a committee study; briefs only apply to studies.")
-        raise typer.Exit(1)
-    sub = committees.fetch_submission(fetcher, o.ref)
-    members = committees.fetch_members(fetcher, o.ref.code)
-    typer.echo("\n" + brief_guide.render(o.ref, sub, members, date.today(), mp.name))
+    r = _run(service.rank, postal_code, interests, pick)
+    typer.echo("\n" + _run(service.brief_text, r, item))
 
 
 @app.command("letter")
@@ -199,19 +103,13 @@ def letter_cmd(
     pick: int = typer.Option(None),
 ):
     """Draft a short personal letter to your MP citing their real statements. Prints it; never sends."""
-    from .actions import letter
+    r = _run(service.rank, postal_code, interests, pick)
+    typer.echo("\n" + _run(service.letter_text, r, item, why, ask, position))
 
-    mp, profile, roles, shown, _, db = _rank(postal_code, interests, pick, False)
-    o = _item(shown, item)
-    if o.kind == "petition":
-        typer.echo("For a petition the action is to sign it (link below); a letter isn't needed.\n" + o.url)
-        raise typer.Exit(0)
-    mine = {code for code, _ in roles.committees} if roles else set()
-    code = o.ref.code if o.kind == "committee_study" and o.ref.code in mine else None
-    li = letter.LetterInput(mp.name, mp.riding, o.title, o.url, o.kind, why, ask, position, code, o.topics)
-    client = None
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        import anthropic
 
-        client = anthropic.Anthropic()
-    typer.echo("\n" + letter.draft(li, profile.champions, client))
+@app.command("web")
+def web_cmd(port: int = typer.Option(8000, help="Local port")):
+    """Run the simple local web page (this machine only)."""
+    from . import web
+
+    web.serve(port)

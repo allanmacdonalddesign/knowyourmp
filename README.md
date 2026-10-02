@@ -7,6 +7,7 @@ Helps Canadians find where they can still change an outcome, and what to do. See
 - Phase 1 (postal code to cited MP profile, CLI): done
 - Phase 2 (opportunities and ranking): done for committee studies, bills and petitions; Gazette not yet
 - Phase 3 (action helpers): done (cited letter drafts, brief submission guide)
+- Phase 4 (web UI): done (simple local page)
 
 ## Setup
 ```
@@ -20,6 +21,7 @@ export ANTHROPIC_API_KEY=...   # optional; enables topic tagging. Never commit i
 python -m civic profile M5V3L9
 python -m civic profile <POSTAL> --pick 2    # when a postal code covers more than one riding
 python -m civic opportunities M5V3L9 --interests housing,climate   # needs ANTHROPIC_API_KEY
+python -m civic web      # simple local page at http://127.0.0.1:8000 (this machine only)
 # then, using the item numbers from `opportunities`:
 python -m civic brief M5V3L9 --interests health,gender --item 1
 python -m civic letter M5V3L9 --interests health,gender --item 1 --why "your own reason"
