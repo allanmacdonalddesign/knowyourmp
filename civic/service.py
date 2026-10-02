@@ -127,3 +127,15 @@ def letter_text(r: Ranked, n: int, why: str = "", ask: str = "", position: str =
 
         client = anthropic.Anthropic()
     return letter.draft(li, r.profile.champions, client)
+
+
+def card(postal_code: str, pick: int | None = None):
+    """The MP 'baseball card' for a postal code."""
+    from .analysis import card as cardmod
+
+    db = cache.connect()
+    fetcher = Fetcher(cache.HttpCache(db))
+    mp = find_mp(fetcher, postal_code, pick)
+    profile, slug, _ = mp_context(db, fetcher, mp)
+    bills = op.sponsored_bills(fetcher, slug) if slug else []
+    return cardmod.build_card(fetcher, mp, profile, slug, bills, classifier=classifier(db))

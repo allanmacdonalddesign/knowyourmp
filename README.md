@@ -7,7 +7,7 @@ Helps Canadians find where they can still change an outcome, and what to do. See
 - Phase 1 (postal code to cited MP profile, CLI): done
 - Phase 2 (opportunities and ranking): done for committee studies, bills and petitions; Gazette not yet
 - Phase 3 (action helpers): done (cited letter drafts, brief submission guide)
-- Phase 4 (web UI): done (simple local page)
+- Phase 4 (web UI): done. Flow: postal code -> MP "baseball card" (votes, party-line record, bills, statements, committees) -> filter by what you care about -> ways to act
 
 ## Setup
 ```

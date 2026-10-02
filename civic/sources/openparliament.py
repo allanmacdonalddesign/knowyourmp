@@ -25,6 +25,7 @@ class Bill:
     title: str
     is_private_member_bill: bool
     status: str
+    became_law: bool = False
 
 
 def _en(value) -> str | None:
@@ -79,6 +80,46 @@ def sponsored_bills(fetcher: Fetcher, slug: str) -> list[Bill]:
                 title=_en(d["name"]) or "",
                 is_private_member_bill=bool(d.get("private_member_bill")),
                 status=_en(d.get("status")) or "",
+                became_law=bool(d.get("law")),
             )
         )
     return bills
+
+
+@dataclass(frozen=True)
+class Ballot:
+    vote_url: str
+    ballot: str  # Yes / No / Paired
+
+
+@dataclass(frozen=True)
+class VoteDetail:
+    url: str
+    date: str
+    description: str
+    result: str
+    bill_url: str | None
+    party_positions: dict  # short party name -> "Yes" / "No" / ...
+
+
+def politician(fetcher: Fetcher, slug: str) -> dict:
+    return fetcher.get_json(f"{API}/politicians/{slug}/", {"format": "json"})
+
+
+def ballots(fetcher: Fetcher, slug: str, session: str) -> list[Ballot]:
+    """All ballots this MP cast in a session, newest first. Absences are not listed by the API."""
+    data = fetcher.get_json(f"{API}/votes/ballots/", {"politician": slug, "format": "json", "limit": 1000})
+    return [Ballot(o["vote_url"], o["ballot"]) for o in data["objects"] if f"/votes/{session}/" in o["vote_url"]]
+
+
+def latest_vote_number(fetcher: Fetcher, session: str) -> int:
+    data = fetcher.get_json(f"{API}/votes/", {"session": session, "format": "json", "limit": 1})
+    return data["objects"][0]["number"] if data["objects"] else 0
+
+
+def vote_detail(fetcher: Fetcher, vote_url: str) -> VoteDetail:
+    d = fetcher.get_json(API + vote_url, {"format": "json"}, max_age=30 * 86400)
+    return VoteDetail(
+        vote_url, d["date"], _en(d["description"]) or "", d["result"], d.get("bill_url"),
+        {_en(p["party"]["short_name"]): p["vote"] for p in d.get("party_votes", [])},
+    )
