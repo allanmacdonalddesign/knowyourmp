@@ -70,5 +70,14 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - Petitions an MP has presented: no source found yet.
 - Topic tagging: Claude Haiku 4.5, taxonomy in `civic/topics.json`, cached per source URL in SQLite.
 
+## Facts used by Phase 2 (verified)
+- Calls for briefs: `https://www.ourcommons.ca/Committees/en/Participate` lists the studies "currently seeking input" (links `.../StudyActivity?studyActivityId=N`). Each study page has "Submit a brief before 11:59 p.m. (EDT) on <date>", a brief-size limit, and live counts "Briefs (N)" and "Witnesses (N)", which we use as the neglectedness signal. Some studies show no deadline (e.g. bill studies), so deadline can be None.
+- The study page path is case-insensitive (`/committees/` and `/Committees/` both work).
+- LEGISinfo stages used: "At consideration in committee / at second reading / at report stage / at third reading in the House of Commons". House bills only; "Outside the Order of Precedence" PMBs are skipped.
+- Petition detail page contains the full request text from "We, the undersigned" to "History"; used for topic tagging and a short title.
+- Bills that already appear as an open committee study (title "Bill C-xxx") are deduped.
+- Not done: Canada Gazette Part I consultations (HTML only), Order Paper.
+- Cost note: first run tags about 130 items with Claude (cached afterwards) and fetches about 95 petition pages at 1 request per second.
+
 ## Questions
 None open.

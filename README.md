@@ -5,7 +5,7 @@ Helps Canadians find where they can still change an outcome, and what to do. See
 ## Status
 - Phase 0 (explore and verify): done
 - Phase 1 (postal code to cited MP profile, CLI): done
-- Phase 2 (opportunities and ranking): not started
+- Phase 2 (opportunities and ranking): done for committee studies, bills and petitions; Gazette not yet
 
 ## Setup
 ```
@@ -18,6 +18,7 @@ export ANTHROPIC_API_KEY=...   # optional; enables topic tagging. Never commit i
 ```
 python -m civic profile M5V3L9
 python -m civic profile <POSTAL> --pick 2    # when a postal code covers more than one riding
+python -m civic opportunities M5V3L9 --interests housing,climate   # needs ANTHROPIC_API_KEY
 pytest
 ```
 
