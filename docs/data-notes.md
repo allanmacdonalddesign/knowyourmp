@@ -48,10 +48,19 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 ## Canada Gazette Part I — PARTIAL
 - `https://gazette.gc.ca/rp-pr/p1/2026/index-eng.html` → 200 HTML (`samples/gazette_p1_2026_index.html`). No structured feed found yet; scraping or an RSS feed to look for.
 
-## Not yet checked
-- Notice Paper / Order Paper.
-- openparliament's database download and its current rate-limit guidance.
-- A known split postal code for the Represent concordance shape.
+## Order Paper / Notice Paper (ourcommons.ca) — PARTIAL (HTML only)
+- `https://www.ourcommons.ca/en/notice-paper` is a 404. `https://www.ourcommons.ca/DocumentViewer/en/house/latest-sitting` redirects to `/documentviewer/en/45-1/house/sitting-145/order-notice` (Order Paper and Notice Paper No. 145, 2026-10-05). Sample: `samples/order_notice_paper.html` (~150 KB HTML).
+- HTML only; no structured export found. Section parsing (Private Members' Business, Government Orders, etc.) not yet done. Low priority for v1: LEGISinfo plus the petitions list already cover bills and PMBs.
+
+## openparliament operational rules (from https://openparliament.ca/api/)
+- Rate limit exists: heavy concurrency gets HTTP 429. Keep requests sequential (I used 1s sleeps).
+- Send `API-Version: v1` (or `?version=v1`) to pin the response shape; the API warns of breaking changes.
+- Put an email in the User-Agent (not enforced).
+- Bulk data: monthly Postgres dump at https://openparliament.ca/data-download/ (`openparliament.public.sql.bz2`, ~1.2 GB compressed / ~6 GB uncompressed as of mid 2023). Use this for bulk speech analysis; not downloaded yet.
+
+## Split postal codes — NOT YET OBSERVED
+- Tried ~25 postal codes. None returned more than one federal MP. `G0A1A0` has a non-empty `boundaries_concordance` and `representatives_concordance` array but it was not federal: the single MP came from `representatives_centroid` and the concordance list had no federal-district entry. Sample: `samples/represent_postcode_G0A1A0_split.json`.
+- Until a real straddling federal postcode is found, code must treat "more than one MP across centroid + concordance (deduped by name)" as a split, ask the user to choose or give a full address, and never pick silently. Tests will use a hand-built fixture for this case, clearly labelled synthetic.
 
 ## Questions
 None open.
