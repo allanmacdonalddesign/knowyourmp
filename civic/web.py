@@ -83,11 +83,14 @@ a:hover{color:var(--red)}
 a.bar:hover,button.bar:hover,.radio:hover{background:var(--red);color:#fff}
 .photo .tag:hover{background:var(--red);color:#fff;border-color:var(--red)}
 .chip:hover span{border-color:var(--red);color:var(--red)}.chip:hover input:checked+span{background:var(--red);border-color:var(--red);color:#fff}
-.chip input:focus-visible+span,a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.chip input:focus-visible+span,a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .cell[data-item]:hover p,.item:hover>p{color:var(--red)}
 details summary:hover,sup a:hover{color:var(--red)}sup a:hover{border-color:var(--red)}
-.filter input[type=text]:focus,input.postal:focus{border-bottom-color:var(--red)}
+input.postal:focus,.filter input[type=text]:focus{box-shadow:0 3px 0 var(--ink)}
 .postal:focus-visible,.filter input[type=text]:focus-visible{outline:0}
+.cta{background:#000;color:#fff}
+@media (prefers-color-scheme:dark){.cta{background:#fff;color:#000}}
+a.cta:hover,button.cta:hover{background:var(--red);color:#fff}
 .red{color:var(--red)}
 """
 
@@ -123,7 +126,7 @@ def home(msg: str = "", postal: str = "") -> bytes:
 <div class="cell s8">{err}<label for="postal" class="mono soft">Where do you live? Postal code</label>
 <input class="postal" id="postal" name="postal" value="{escape(postal)}" placeholder="M5V 3L9" required maxlength="10" autocomplete="off" autofocus>
 <div class="fine">The first lookup for an MP can take a minute or two while it reads public records. After that it is fast. Your postal code is never stored or logged.</div></div>
-<div class="cell s4" style="padding:0"><button class="bar mono" type="submit" style="height:100%;min-height:120px;border-bottom:0;font-size:.9rem">Find my MP <span class="arrow">&#8599;</span></button></div></div></form>
+<div class="cell s4" style="padding:0"><button class="bar cta mono" type="submit" style="height:100%;min-height:120px;border-bottom:0;font-size:.9rem">Find my MP <span class="arrow">&#8599;</span></button></div></div></form>
 {marquee("Know your MP")}
 <div class="grid"><div class="cell s12 mono soft" style="border-bottom:0">Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same card.</div></div>""")
 
@@ -136,7 +139,7 @@ def choose_riding(e: service.SplitPostcode, postal) -> bytes:
     return page("Choose your riding", f"""{topbar("One more step")}
 <div class="grid"><div class="cell s12"><div class="mono soft">Split postal code</div><h1 class="name">Which riding<br>are you in?</h1><p class="lead">{escape(str(e))}</p></div></div>
 <form method="post" action="/mp"><input type="hidden" name="postal" value="{escape(postal)}">{opts}
-<button class="bar mono" type="submit">Continue <span class="arrow">&#8599;</span></button></form>""")
+<button class="bar cta mono" type="submit">Continue <span class="arrow">&#8599;</span></button></form>""")
 
 
 # ---------------------------------------------------------------- the card
