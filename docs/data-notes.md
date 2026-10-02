@@ -32,11 +32,15 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - `SponsorPersonName` was a blank `' '` on the bill inspected, so sponsor linking may need `SponsorPersonId`; to verify.
 - 91 of 188 are private members' bills, which is useful for the leverage ranking.
 
-## Petitions (ourcommons.ca) — BLOCKED, needs a decision
-- `petitions.ourcommons.ca` redirects to `https://www.ourcommons.ca/petitions/en/Petition/Search?status=Open`.
-- The `output=xml` / `output=csv` parameters just return the HTML search page. The page's JS shows the XML export is gated by **reCAPTCHA** (`PRE_SEARCH_DOWNLOAD_XML`), so it can't be fetched directly.
-- The server-rendered HTML did not contain petition rows I could find (no `e-NNNN` ids, no Details links), so results are probably loaded by script.
-- **Open question:** do we find the underlying results endpoint, scrape with a headless browser, or use a different feed? I won't try to get around the reCAPTCHA. See "Questions".
+## Petitions (ourcommons.ca) — WORKS via the page's own search endpoint, unfiltered only
+- The XML/CSV export (`output=xml|csv`) is gated by reCAPTCHA; we do not use it.
+- The search page loads results by `POST https://www.ourcommons.ca/petitions/en/Petition/SearchAsync` (form body `reCaptchaAction=SEARCH`), returning JSON `{success, html, ...}` where `html` is a results fragment. Sample: `samples/petitions_searchasync.json`.
+- The page's own JS (`isCaptchaRequired`) only requires a reCAPTCHA token when a filter is set (`sponsor, keyword, text, type, status`, a non-default `order`, or xml/csv output). The plain default listing needs none, so we use only the unfiltered request and **never send filters or work around the captcha**. Topic/status filtering is done on our side.
+- Default listing: "95 results found", 20 per page (`RPP=20`), `Page=N` for paging (page 2 request tested above returns different petition ids). Re-check that the default view is open petitions only.
+- Parseable per row: petition id (`e-7775`), category ("Social affairs and equality"), keyword tags (e.g. "Housing", a province), status text and closing date ("Open for signature until January 27, 2027"), sponsoring MP name, signature count, and a link `Details?Petition=e-7775`. The HTML contains each row twice (desktop `<tr>` and a mobile `<div>`), so parse only the `<tr class="Pub">` rows.
+- Petition titles/text are not in the list; they need the Details page (not yet fetched).
+- robots.txt (`ourcommons.ca/robots.txt`) does not disallow `/petitions/`. Keep to one request per page with the descriptive User-Agent and cache.
+- This is scraping an internal endpoint, so isolate it in `sources/petitions.py` and expect breakage.
 
 ## Committees (ourcommons.ca) — PARTIAL
 - `https://www.ourcommons.ca/Committees/en/Work?parl=45&session=1` → 200 HTML (`samples/committees_work.html`), links like `/Committees/en/ENVI/StudyActivity?studyActivityId=…`. No structured export found yet; this will need an isolated scraper in `sources/`. Calls for briefs and deadlines not yet located.
@@ -50,4 +54,4 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - A known split postal code for the Represent concordance shape.
 
 ## Questions
-1. Petitions: which approach above do you prefer?
+None open.
