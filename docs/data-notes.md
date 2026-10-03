@@ -8,6 +8,7 @@ All requests sent with `User-Agent: civic-leverage-tool/0.1 (allan@pragmatics.st
 - **`representatives_concordance` is absent** for this postcode and `boundaries_concordance` is `[]`. Concordance only appears when a postcode straddles boundaries, so a split postcode is detected by its presence/non-empty. Still need a known split postcode to verify its shape.
 - MP = entry in `representatives_centroid` with `elected_office == "MP"` (4 reps returned; 1 MP: Chi Nguyen, Liberal, "Spadina—Harbourfront").
 - Useful MP fields: `name, party_name, district_name, url (ourcommons), email, offices[] (legislature / constituency, with tel + postal)`.
+- Postcode lookups are **never cached** (`Fetcher.get_json(..., cache=False)`): the URL contains the postal code. `cache.connect()` deletes any such rows left by older versions.
 - Riding names have changed with the new boundaries (`Spadina—Fort York` appears in `boundaries_centroid`; the MP is for `Spadina—Harbourfront`). Use the MP entry's `district_name`, not the boundary list.
 
 ## openparliament.ca — WORKS

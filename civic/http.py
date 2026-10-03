@@ -19,22 +19,25 @@ class Fetcher:
         )
         self._last = 0.0
 
-    def get_text(self, url: str, params: dict | None = None, max_age: float = DAY) -> str:
+    def get_text(self, url: str, params: dict | None = None, max_age: float = DAY, cache: bool = True) -> str:
+        """cache=False: never read or write the on-disk cache (for URLs carrying personal data)."""
         key = url + ("?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items())) if params else "")
-        hit = self.cache.get(key, max_age)
-        if hit is not None:
-            return hit
+        if cache:
+            hit = self.cache.get(key, max_age)
+            if hit is not None:
+                return hit
         wait = self.min_interval - (time.monotonic() - self._last)
         if wait > 0:
             time.sleep(wait)
         resp = self.client.get(url, params=params)
         self._last = time.monotonic()
         resp.raise_for_status()
-        self.cache.put(key, resp.text)
+        if cache:
+            self.cache.put(key, resp.text)
         return resp.text
 
-    def get_json(self, url: str, params: dict | None = None, max_age: float = DAY):
-        return json.loads(self.get_text(url, params, max_age))
+    def get_json(self, url: str, params: dict | None = None, max_age: float = DAY, cache: bool = True):
+        return json.loads(self.get_text(url, params, max_age, cache))
 
     def post_text(self, url: str, data: dict, params: dict | None = None, max_age: float = HOUR) -> str:
         key = "POST " + url + ("?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items())) if params else "")

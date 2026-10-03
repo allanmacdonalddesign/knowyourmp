@@ -191,3 +191,32 @@ def bill_info(fetcher: Fetcher, bill_url: str) -> BillInfo:
         bill_url, d["number"], _en(d["name"]) or "", _en(d.get("short_title")) or "", d.get("text_url"),
         bool(d.get("private_member_bill")), bool(d.get("law")), _en(d.get("status")) or "",
     )
+
+
+@dataclass(frozen=True)
+class Election:
+    won: bool
+    year: str
+    share: int  # percent of the vote in their riding
+    url: str
+
+
+ELECTION_RE = re.compile(r"<strong>(Won|Lost)</strong>\s+(?:his|her|their) last election, in (\d{4}), with (\d{1,3})% of the vote", re.I)
+
+
+def last_election(fetcher: Fetcher, slug: str) -> Election | None:
+    """Result of their last election, from the openparliament.ca politician page (the API does not carry it)."""
+    url = f"{SITE}/politicians/{slug}/"
+    try:
+        page = fetcher.get_text(url, max_age=30 * 86400)
+    except Exception:
+        return None
+    m = ELECTION_RE.search(page)
+    if not m:
+        return None
+    return Election(m.group(1).lower() == "won", m.group(2), int(m.group(3)), url)
+
+
+def favourite_word(info: dict) -> str | None:
+    words = (info.get("other_info") or {}).get("favourite_word") or []
+    return words[0] if words else None

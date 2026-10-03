@@ -1,6 +1,6 @@
 # MP Card
 
-Your MP as a baseball card: enter a postal code, see who represents you and what they actually do. Votes, bills and speeches are described in plain language, and every claim links to its source.
+Your MP and their stats: enter a postal code, see who represents you and what they actually do. Votes, bills and speeches are described in plain language, and every claim links to its source.
 
 ## Run
 ```

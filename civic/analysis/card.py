@@ -1,10 +1,11 @@
 """The MP 'baseball card': service, plain-language stance, party-line record, bills, committees. All cited."""
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from ..sources import openparliament as op
 from . import overview as overview_mod
-from . import plain, stance
+from . import plain, stance, words
 
 RECENT_VOTES = 40  # votes checked for party-line behaviour (each needs one cached request)
 
@@ -39,6 +40,12 @@ class Card:
     overview: list[dict] = field(default_factory=list)  # [{"text", "refs": [ids]}]
     ref_links: dict = field(default_factory=dict)  # id -> (label, url)
     notes: list[str] = field(default_factory=list)
+    election: op.Election | None = None
+    favourite_word: str | None = None
+    terms: list[words.Term] = field(default_factory=list)
+    human: dict = field(default_factory=dict)  # bill url -> everyday-language rewrite of the plain sentence (AI)
+    speech_count: int = 0  # speeches the term counts are based on
+    speeches_since: str | None = None
 
     @property
     def attendance(self) -> float | None:
@@ -71,7 +78,7 @@ def compare(ballot: str, positions: dict, party_name: str) -> tuple[str | None, 
     return pos, None
 
 
-def build_card(fetcher, mp, profile, slug, bills, session: str = "45-1", classifier=None, explainer=None, llm=None) -> Card:
+def build_card(fetcher, mp, profile, slug, bills, session: str = "45-1", classifier=None, explainer=None, llm=None, speeches=(), humanizer=None) -> Card:
     """`classifier`/`explainer`/`llm` are optional: without an API key the card still shows cited facts."""
     card = Card(mp, profile, slug, None, None, session, bills=list(bills))
     if not slug:
@@ -82,6 +89,10 @@ def build_card(fetcher, mp, profile, slug, bills, session: str = "45-1", classif
         card.photo_url = op.SITE + info["image"]
     starts = [m["start_date"] for m in info.get("memberships", []) if m.get("start_date")]
     card.mp_since = min(starts) if starts else None
+    card.favourite_word = op.favourite_word(info)
+    card.election = op.last_election(fetcher, slug)
+    card.terms, card.speech_count = words.top_terms(speeches), len(speeches)
+    card.speeches_since = min((s.time[:10] for s in speeches if s.time), default=None)
     ended = [m["end_date"] for m in info.get("memberships", []) if m.get("end_date")]
     if ended and not any(not m.get("end_date") for m in info.get("memberships", [])):
         card.notes.append(
@@ -114,28 +125,25 @@ def build_card(fetcher, mp, profile, slug, bills, session: str = "45-1", classif
         for kv in card.key_votes:
             kv.topics = classifier.classify(op.SITE + kv.bill_url, kv.plain)
 
+    if humanizer:
+        listing = [(kv.bill_url, kv.plain, kv.legal_title) for kv in card.key_votes]
+        seen = {u for u, _, _ in listing}
+        listing += [(b.url, card.bill_plain[b.url], b.title) for b in card.bills if b.url not in seen and card.bill_plain.get(b.url)]
+        card.human = humanizer.rewrite(listing)
     card.overview, card.ref_links = _overview(card, llm)
     return card
 
 
 def _overview(card: Card, llm) -> tuple[list[dict], dict]:
-    items: dict[str, str] = {}
+    """Two cited sentences for 'At a glance': what they voted for, and what they voted against."""
+    items: dict[str, dict[str, str]] = {"for": {}, "against": {}}
     links: dict[str, tuple[str, str]] = {}
-    for i, v in enumerate(card.key_votes[:20], 1):
+    for i, v in enumerate(card.key_votes[:30], 1):
         k = f"v{i}"
-        items[k] = f"Voted {'FOR' if v.ballot == 'Yes' else 'AGAINST'} (at {v.stage}): {v.plain}"
+        items["for" if v.ballot == "Yes" else "against"][k] = f"(at {v.stage}) {v.plain}"
         links[k] = (f"Bill {v.number} vote", op.SITE + v.vote_url)
-    for i, b in enumerate(card.bills[:8], 1):
-        k = f"b{i}"
-        items[k] = f"Sponsored a bill ({b.status}): {card.bill_plain.get(b.url, b.title)}"
-        links[k] = (f"Bill {b.number}", op.SITE + b.url)
-    stmts = [c for c in card.profile.champions if c.quote]
-    for i, c in enumerate(stmts[:12], 1):
-        k = f"s{i}"
-        items[k] = f"Chose to speak about: {c.text.split(': ', 1)[-1]}" + (f" [{', '.join(c.topics)}]" if c.topics else "")
-        links[k] = (c.text.split(":")[0], c.url)
-    y, n = len(card.backed), len(card.opposed)
-    stats = (f"{y} bills voted for and {n} against at 2nd/3rd reading this session; "
-             f"{card.party_line[0]} of {card.party_line[1]} recent votes with their party.")
-    sentences = overview_mod.generate(llm, card.mp.name, card.mp.party, items, stats)
+    stats = f"{len(card.backed)} bills voted for and {len(card.opposed)} against at 2nd/3rd reading this session."
+    with ThreadPoolExecutor(max_workers=2) as pool:  # the two sides are independent, so ask at the same time
+        jobs = [pool.submit(overview_mod.side, llm, card.mp.name, card.mp.party, kind, items[kind], stats) for kind in ("for", "against")]
+        sentences = [s for s in (j.result() for j in jobs) if s]
     return sentences, links

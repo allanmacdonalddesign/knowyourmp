@@ -12,6 +12,11 @@ def connect(path=None) -> sqlite3.Connection:
         path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(str(path))
     db.execute("CREATE TABLE IF NOT EXISTS http_cache (key TEXT PRIMARY KEY, body TEXT, fetched_at REAL)")
+    # Older versions cached Represent postcode lookups; their keys contain postal codes. Purge them.
+    purged = db.execute("DELETE FROM http_cache WHERE key LIKE '%represent.opennorth.ca/postcodes/%'").rowcount
+    db.commit()
+    if purged:
+        db.execute("VACUUM")  # deleted rows otherwise linger in free pages on disk
     db.execute(
         "CREATE TABLE IF NOT EXISTS classifications "
         "(source_url TEXT PRIMARY KEY, topics TEXT, model TEXT, classified_at REAL)"
