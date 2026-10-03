@@ -1,0 +1,59 @@
+name: Build and publish
+
+# Rebuilds every MP page from the public records and publishes the result to Cloudflare Pages.
+# Weekly rather than nightly: a full refresh reads several thousand pages from openparliament.ca, a volunteer-run service.
+on:
+  schedule:
+    - cron: "17 9 * * 0" # Sundays 09:17 UTC
+  workflow_dispatch: # the "Run workflow" button, for a manual refresh
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      CIVIC_DB: ${{ github.workspace }}/.cache/cache.db
+      SITE_URL: https://mp.allan-macdonald.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      # Everything fetched or written by the AI is cached, so later runs only do what changed. The cache is saved even if the
+      # build stops early, which lets a first, very long build finish over a few runs.
+      - name: Restore data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache
+          key: civic-cache-${{ github.run_id }}
+          restore-keys: civic-cache-
+
+      - name: Build site
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m civic site --out dist --budget-minutes 300 # exits non-zero if incomplete, so nothing half-built is published
+
+      - name: Save data cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache
+          key: civic-cache-${{ github.run_id }}
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=knowyourmp --branch=main

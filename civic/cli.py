@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import typer
 
 from . import cache, service
@@ -55,3 +57,23 @@ def web_cmd(port: int = typer.Option(8000, help="Local port")):
     from . import web
 
     web.serve(port)
+
+
+@app.command("site")
+def site_cmd(
+    out: Path = typer.Option(Path("dist"), help="Where to write the site"),
+    limit: int = typer.Option(None, help="Only build the first N MPs (for testing)"),
+    only: str = typer.Option(None, help="Only build this MP's page, e.g. chi-nguyen"),
+    budget_minutes: float = typer.Option(None, help="Stop starting new MPs after this long; run again to continue"),
+):
+    """Build the static site: a page for every sitting MP, a directory page, sitemap and robots.txt."""
+    from . import site
+
+    res = site.build(out, limit=limit, only=only, budget_minutes=budget_minutes)
+    typer.echo(f"Built {len(res.built)} pages, {len(res.failed)} failed, {res.skipped} not attempted.")
+    for name, err in res.failed:
+        typer.echo(f"  failed: {name}: {err}")
+    if res.skipped:
+        raise typer.Exit(3)  # incomplete: do not publish
+    if len(res.failed) > max(3, res.total // 20):
+        raise typer.Exit(1)  # too many missing pages to publish

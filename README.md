@@ -22,3 +22,13 @@ Nonpartisan and cited: same card for every MP, every claim links to a primary so
 
 ## History
 The earlier version also ranked opportunities to act on (committee briefs, bills, petitions) and drafted letters. That work is preserved in git: `git checkout pre-card-only`. See `BRIEF.md` for the original plan and `docs/data-notes.md` for verified data-source notes.
+
+## Publishing as a static site
+`python -m civic site` builds a page for every sitting MP (`dist/mp/<name>/`), a directory home page, `sitemap.xml` and `robots.txt`; each page has its own title, description, canonical address, social tags and an "Updated" date.
+```
+python -m civic site --limit 3          # try it on three MPs
+python -m civic site --budget-minutes 300   # full build; exits 3 if it ran out of time (run again, it resumes from the cache)
+```
+The first full build is slow (hours: it reads public records politely, one request per second). After that it is mostly cache hits. `.github/workflows/publish.yml` rebuilds weekly and publishes to Cloudflare Pages. It needs three repository secrets: `ANTHROPIC_API_KEY`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Set `SITE_URL` (and the workflow's copy of it) to the address the site is served from.
+
+`functions/api/postal.js` is a small Cloudflare Pages Function that looks up a postal code and redirects to that riding's page. The code is never logged, stored or put in the address.

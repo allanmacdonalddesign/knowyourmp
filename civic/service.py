@@ -71,12 +71,19 @@ def mp_context(db, fetcher, mp):
 
 def card(query: str, pick: int | None = None, by_name: bool = False):
     """The MP 'baseball card' for a postal code (or, with by_name, an MP's name)."""
-    from .analysis import card as cardmod
-    from .analysis import plain
-
     db = cache.connect()
     fetcher = Fetcher(cache.HttpCache(db))
     mp = (find_mp_by_name if by_name else find_mp)(fetcher, query, pick)
+    return card_for(mp, db, fetcher)
+
+
+def card_for(mp, db=None, fetcher=None):
+    """The card for an MP we already have (also used by the static site build)."""
+    from .analysis import card as cardmod
+    from .analysis import plain
+
+    db = db or cache.connect()
+    fetcher = fetcher or Fetcher(cache.HttpCache(db))
     profile, slug, _ = mp_context(db, fetcher, mp)
     bills = op.sponsored_bills(fetcher, slug) if slug else []
     llm = None

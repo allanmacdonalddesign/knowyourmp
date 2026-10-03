@@ -75,6 +75,14 @@ a.bar:hover,button.bar:hover{background:var(--ink);color:var(--bg)}
 .ring .lbl{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);color:var(--soft);text-transform:lowercase}
 @keyframes spinring{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ring .spin{animation:none}}
+/* published site: MP directory */
+.mplist{display:grid;grid-template-columns:repeat(3,1fr)}
+.mprow{display:block;padding:18px 32px 20px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-decoration:none;color:inherit;min-width:0}
+.mprow:nth-child(3n){border-right:0}.mprow:hover .nm{color:var(--red)}
+.mprow .nm{display:block;font-size:1.15rem;line-height:1.3}.mprow .soft{display:block;margin-top:4px}
+.mprow.hidden{display:none}
+@media (max-width:900px){.mplist{grid-template-columns:1fr 1fr}.mprow:nth-child(3n){border-right:1px solid var(--line)}.mprow:nth-child(2n){border-right:0}}
+@media (max-width:600px){.mplist{grid-template-columns:1fr}.mprow{border-right:0!important;padding:16px 20px}}
 @keyframes slide{to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:reduce){.marq .t{animation:none}}
 .sec{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:8px 16px;padding:22px 32px;border-bottom:1px solid var(--line)}
@@ -167,9 +175,9 @@ a.cta:hover,button.cta:hover{background:var(--red);color:#fff}
 """
 
 
-def page(title: str, body: str) -> bytes:
+def page(title: str, body: str, head: str = "") -> bytes:
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<meta name="referrer" content="no-referrer"><title>{escape(title)}</title><style>{CSS}</style></head>'
+            f'<meta name="referrer" content="no-referrer"><title>{escape(title)}</title>{head}<style>{CSS}</style></head>'
             f'<body><div class="wrap">{body}</div></body></html>').encode()
 
 
@@ -238,6 +246,56 @@ q.classList.toggle('byname',e.target.value==='name');q.focus();}});}})();</scrip
 <div class="grid"><div class="cell s12 mono soft" style="border-bottom:0">Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same card.</div></div>""")
 
 
+SITE_NOTES = {"postal": "We could not read that postal code. Please check it.", "notfound": "No MP found for that postal code. Try searching by name.",
+              "down": "The postal code lookup is not available right now. Search by name below."}
+
+
+def site_home(mps: list[dict], updated: str, url: str) -> bytes:
+    """The published directory page: lookup on top, every MP below as a plain link so it can be crawled.
+
+    mps: dicts with name, party, riding, slug. A postal code is POSTed to /api/postal (a Cloudflare Pages function) and never put in a URL."""
+    rows = "".join(
+        f'<a class="mprow" href="/mp/{escape(m["slug"])}/" data-slug="{escape(m["slug"])}" data-text="{escape((m["name"] + " " + m["riding"] + " " + m["party"]).lower())}">'
+        f'<span class="nm">{escape(m["name"])}</span><span class="mono soft">{escape(m["party"])} &middot; {escape(m["riding"])}</span></a>'
+        for m in sorted(mps, key=lambda m: m["name"].casefold()))
+    modes = "".join(f'<label><input type="radio" name="by" value="{k}"{" checked" if k == "postal" else ""}><span>{lbl}</span></label>'
+                    for k, lbl in (("postal", "Postal code"), ("name", "MP name")))
+    label, ph, maxlen, hint = LOOKUP_MODES["postal"]
+    title = "Know Your MP: see how your Member of Parliament votes, in plain language"
+    desc = ("Look up your Member of Parliament by postal code or name. See how they voted, the bills they sponsored and what they speak about, "
+            "in plain language with links to the sources.")
+    body = f"""{topbar("Meet your MP", LEAF)}
+<div class="grid"><div class="cell s5 hero">
+<div class="mono soft">Your MP, and their stats</div>
+<h1 class="name" style="font-size:clamp(3.4rem,9vw,8.5rem)">Meet<br>your MP<span class="red">.</span></h1>
+<p class="lead">What they vote for, what they speak up about, what they put their name on. In plain words, with receipts.</p></div>
+<form class="cell s7 lookup" method="post" action="/api/postal" id="lookup"><div class="note mono hidden" id="note"></div>
+<div class="mode mono" role="radiogroup" aria-label="Look up by">{modes}</div>
+<label for="q" class="mono soft" id="qlabel">{label}</label>
+<input class="postal" id="q" name="code" placeholder="{ph}" required maxlength="{maxlen}" autocomplete="off" autofocus>
+<div class="fine"><span id="qhint">{hint}</span> A postal code is sent only to look up your riding. It is not stored or put in the address.</div>
+<button class="cta mono go" type="submit">Find my MP <span class="arrow">&#8599;</span></button></form></div>
+{marquee("Know your MP")}
+<div class="sec" id="all"><div><h2 id="listh">All {len(mps)} MPs</h2></div><span class="mono soft">Updated {escape(updated)}</span></div>
+<div class="mplist" id="mplist">{rows}</div>
+<div class="grid"><div class="cell s12 fine" style="border-bottom:0">Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same page. Descriptions are AI-written from those records; follow the links to check.</div></div>
+<script>(()=>{{const M={json.dumps(LOOKUP_MODES)},N={json.dumps(SITE_NOTES)},f=document.getElementById('lookup'),q=document.getElementById('q'),
+rows=[...document.querySelectorAll('.mprow')],h=document.getElementById('listh'),note=document.getElementById('note'),all=rows.length;
+let mode='postal';
+const show=fn=>{{let n=0;rows.forEach(r=>{{const ok=fn(r);r.classList.toggle('hidden',!ok);if(ok)n++;}});return n;}};
+const count=n=>{{h.textContent=n===all?'All '+all+' MPs':n+(n===1?' MP':' MPs');}};
+f.addEventListener('change',e=>{{if(e.target.name!=='by')return;mode=e.target.value;const m=M[mode];
+document.getElementById('qlabel').textContent=m[0];q.placeholder=m[1];q.maxLength=m[2];document.getElementById('qhint').textContent=m[3];
+q.name=mode==='name'?'q':'code';q.classList.toggle('byname',mode==='name');q.value='';count(show(()=>true));q.focus();}});
+q.addEventListener('input',()=>{{if(mode!=='name')return;const w=q.value.toLowerCase().split(/\s+/).filter(Boolean);count(show(r=>w.every(x=>r.dataset.text.includes(x))));}});
+f.addEventListener('submit',e=>{{if(mode!=='name')return;e.preventDefault();const v=rows.filter(r=>!r.classList.contains('hidden'));if(v.length===1)location.href=v[0].href;else document.getElementById('all').scrollIntoView();}});
+const sp=new URLSearchParams(location.search);
+if(sp.get('error')&&N[sp.get('error')]){{note.textContent=N[sp.get('error')];note.classList.remove('hidden');}}
+if(sp.get('choose')){{const want=sp.get('choose').split(',');count(show(r=>want.includes(r.dataset.slug)));h.textContent='More than one MP covers that postal code. Choose yours.';document.getElementById('all').scrollIntoView();}}
+}})();</script>"""
+    return page(title, body, seo_head(title, desc, url + "/"))
+
+
 def choose_riding(e: service.SplitPostcode, q, by: str = "postal") -> bytes:
     opts = "".join(
         f'<label class="radio"><input type="radio" name="pick" value="{i}" required><span><strong style="font-weight:400">{escape(m.name)}</strong>'
@@ -248,6 +306,19 @@ def choose_riding(e: service.SplitPostcode, q, by: str = "postal") -> bytes:
 <div class="grid"><div class="cell s12"><div class="mono soft">{head[0]}</div><h1 class="name">{head[1]}</h1><p class="lead">{escape(str(e))}</p></div></div>
 <form method="post" action="/mp"><input type="hidden" name="q" value="{escape(q)}"><input type="hidden" name="by" value="{escape(by)}">{opts}
 <button class="bar cta mono" type="submit">Continue <span class="arrow">&#8599;</span></button></form>{searching_overlay()}""")
+
+
+def seo_head(title: str, desc: str, url: str, image: str | None = None, jsonld: dict | None = None) -> str:
+    tags = [f'<meta name="description" content="{escape(desc)}">', f'<link rel="canonical" href="{escape(url)}">',
+            '<meta property="og:type" content="website">', f'<meta property="og:title" content="{escape(title)}">',
+            f'<meta property="og:description" content="{escape(desc)}">', f'<meta property="og:url" content="{escape(url)}">',
+            f'<meta name="twitter:card" content="{"summary_large_image" if image else "summary"}">']
+    if image:
+        tags.append(f'<meta property="og:image" content="{escape(image)}">')
+    if jsonld:
+        clean = {k: v for k, v in jsonld.items() if v}
+        tags.append('<script type="application/ld+json">' + json.dumps(clean).replace("</", "<\\/") + "</script>")
+    return "".join(tags)
 
 
 # ---------------------------------------------------------------- the card
@@ -387,7 +458,8 @@ def words_section(c) -> str:
             f'leaving out common words and House procedure words. Hover a bubble or a row to see it in both.{fav}</div></div>')
 
 
-def card_page(c, postal, pick) -> bytes:
+def card_page(c, postal, pick, site: dict | None = None) -> bytes:
+    """site: set for the published static pages (url, updated); adds SEO tags and the updated date."""
     mp, p = c.mp, c.profile
 
     # --- hero
@@ -512,12 +584,21 @@ def card_page(c, postal, pick) -> bytes:
 <div class="fine">Votes that decided a bill (2nd or 3rd reading); {c.other_votes} other votes on amendments and procedure are not shown. Voting against a bill does not mean opposing everything in it, and MPs usually vote with their party. Plain-language descriptions are written by AI from Parliament's official summary of each bill, and &ldquo;Make it more human&rdquo; rewrites them again in everyday words; the official title is under each one.</div>
 </form></div><div class="vgrid">{vitems}</div></div>"""
 
-    footer = (f'{marquee("Know your MP")}<a class="bar mono" href="/">Look up another postal code <span class="arrow">&#8599;</span></a>'
+    footer = (f'{marquee("Know your MP")}<a class="bar mono" href="/">{"Find another MP" if site else "Look up another postal code"} <span class="arrow">&#8599;</span></a>'
               '<div class="grid"><div class="cell s12 fine" style="border-bottom:0">In Canada MPs almost always vote with their party, so a voting record says less than what an MP chooses to speak about and sponsor. '
-              'Sources: openparliament.ca, ourcommons.ca, parl.ca. Descriptions are AI-written from those records; follow the links to check.</div></div>')
+              'Sources: openparliament.ca, ourcommons.ca, parl.ca. Descriptions are AI-written from those records; follow the links to check.'
+              + (f' Updated <time datetime="{site["updated_iso"]}">{site["updated"]}</time>.' if site else "") + '</div></div>')
 
     body = f'{topbar("MP card")}{card_view}{votes_view}{footer}<script>{FILTER_JS}{WORDS_JS}</script>'
-    return page(mp.name, body)
+    if not site:
+        return page(mp.name, body)
+    title = f"{mp.name}, MP for {mp.riding}: votes, bills and speeches | Know Your MP"
+    desc = (f"{mp.name} ({mp.party}) is the Member of Parliament for {mp.riding}. See how they voted, the bills they sponsored and what they "
+            "speak about, in plain language with links to the sources.")
+    return page(title, body, seo_head(title, desc, site["url"], c.photo_url, {
+        "@context": "https://schema.org", "@type": "Person", "name": mp.name, "jobTitle": "Member of Parliament",
+        "url": site["url"], "memberOf": {"@type": "Organization", "name": mp.party}, "image": c.photo_url,
+        "workLocation": {"@type": "Place", "name": mp.riding}}))
 
 
 HUMAN_BUTTON = ('<button type="button" class="hum mono" aria-pressed="false"><span class="sw" aria-hidden="true"></span>Make it more human'

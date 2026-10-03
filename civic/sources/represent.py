@@ -72,16 +72,27 @@ def _fold(text: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", " ", plain.casefold())
 
 
+ROSTER_URL = f"{BASE}/representatives/house-of-commons/?limit=500&format=json"
+
+
+def roster_from(data: dict) -> list[MP]:
+    return [_mp_from(r) for r in data.get("objects", []) if r.get("elected_office") == "MP"]
+
+
+def roster(fetcher: Fetcher) -> list[MP]:
+    """Every sitting MP. Public and the same for everyone, so unlike postal codes it is safe to cache."""
+    return roster_from(fetcher.get_json(ROSTER_URL))
+
+
 def match_name(data: dict, query: str) -> list[MP]:
     """MPs whose name contains every word of the query (any order). An exact full-name match wins outright."""
     words = _fold(query).split()
     if not words:
         raise InvalidName("Please type an MP's name.")
-    mps = [_mp_from(r) for r in data.get("objects", []) if r.get("elected_office") == "MP"]
+    mps = roster_from(data)
     exact = [m for m in mps if _fold(m.name).split() == words]
     return exact or [m for m in mps if all(w in _fold(m.name) for w in words)]
 
 
 def search(fetcher: Fetcher, query: str) -> list[MP]:
-    # The roster is public and the same for everyone, so unlike postal codes it is safe to cache.
-    return match_name(fetcher.get_json(f"{BASE}/representatives/house-of-commons/?limit=500&format=json"), query)
+    return match_name(fetcher.get_json(ROSTER_URL), query)
