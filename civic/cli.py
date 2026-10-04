@@ -69,7 +69,11 @@ def site_cmd(
     """Build the static site: a page for every sitting MP, a directory page, sitemap and robots.txt."""
     from . import site
 
-    res = site.build(out, limit=limit, only=only, budget_minutes=budget_minutes)
+    try:
+        res = site.build(out, limit=limit, only=only, budget_minutes=budget_minutes)
+    except site.AccountProblem as e:
+        typer.echo(f"Stopped: {e}")
+        raise typer.Exit(4)
     typer.echo(f"Built {len(res.built)} pages, {len(res.failed)} failed, {res.skipped} not attempted.")
     for name, err in res.failed:
         typer.echo(f"  failed: {name}: {err}")

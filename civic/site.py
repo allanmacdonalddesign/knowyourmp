@@ -15,6 +15,20 @@ from .sources import openparliament as op
 from .sources import represent
 
 
+class AccountProblem(Exception):
+    """The Anthropic key or balance is unusable. It would fail every MP the same way, so the build stops instead."""
+
+
+def account_problem(e: Exception) -> str | None:
+    import anthropic
+
+    if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return "The Anthropic API key was rejected (invalid, deleted or expired). Set a valid ANTHROPIC_API_KEY."
+    if isinstance(e, anthropic.BadRequestError) and "credit balance" in str(e).lower():
+        return "The Anthropic account is out of credit. Add credit or raise the limit, then run again (progress is cached)."
+    return None
+
+
 @dataclass
 class Result:
     built: list = field(default_factory=list)  # (slug, MP)
@@ -88,6 +102,8 @@ def build(out: Path, limit: int | None = None, only: str | None = None, budget_m
             card = service.card_for(mp, db, fetcher)
             html = web.card_page(card, "", None, site={"url": url, "updated": updated, "updated_iso": iso})
         except Exception as e:  # one bad MP must not stop the other 342
+            if problem := account_problem(e):
+                raise AccountProblem(problem) from e
             res.failed.append((mp.name, f"{type(e).__name__}: {e}"))
             log(f"[{i}/{len(people)}] FAILED {mp.name}: {type(e).__name__}: {e}")
             continue

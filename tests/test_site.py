@@ -38,3 +38,15 @@ def test_home_never_puts_a_postal_code_in_the_address():
 def test_home_escapes_names():
     html = web.site_home([{"name": "<b>x</b>", "party": "X", "riding": "R", "slug": "a"}], "d", "https://x.test").decode()
     assert "<b>x</b>" not in html
+
+
+def test_a_rejected_key_stops_the_build_instead_of_failing_every_mp():
+    import anthropic
+    import httpx
+
+    resp = httpx.Response(401, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
+    bad_key = anthropic.AuthenticationError("invalid x-api-key", response=resp, body=None)
+    assert "rejected" in site.account_problem(bad_key)
+    assert site.account_problem(ValueError("one MP had odd data")) is None
+    out_of_credit = anthropic.BadRequestError("Your credit balance is too low", response=httpx.Response(400, request=resp.request), body=None)
+    assert "out of credit" in site.account_problem(out_of_credit)
