@@ -16,6 +16,7 @@ class MP:
     email: str | None
     ourcommons_url: str | None
     offices: tuple[dict, ...] = ()
+    photo_url: str | None = None
 
 
 class InvalidPostalCode(ValueError):
@@ -63,7 +64,7 @@ def lookup(fetcher: Fetcher, postal: str) -> list[MP]:
 
 def _mp_from(r: dict) -> MP:
     return MP(name=r["name"], party=r.get("party_name", ""), riding=r.get("district_name", ""), email=r.get("email"),
-              ourcommons_url=r.get("url"), offices=tuple(r.get("offices", [])))
+              ourcommons_url=r.get("url"), offices=tuple(r.get("offices", [])), photo_url=r.get("photo_url") or None)
 
 
 def _fold(text: str) -> str:

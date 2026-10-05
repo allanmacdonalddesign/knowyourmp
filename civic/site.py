@@ -60,7 +60,7 @@ def stamp(today: date | None = None) -> tuple[str, str]:
 
 
 def sitemap(slugs: list[str], lastmod: str, base: str = SITE_URL) -> str:
-    urls = [f"{base}/"] + [f"{base}/mp/{s}/" for s in sorted(slugs)]
+    urls = [f"{base}/", f"{base}/mps/"] + [f"{base}/mp/{s}/" for s in sorted(slugs)]
     body = "".join(f"<url><loc>{u}</loc><lastmod>{lastmod}</lastmod></url>" for u in urls)
     return f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>\n'
 
@@ -69,6 +69,8 @@ def write_index_files(out: Path, built: list[tuple[str, represent.MP]], today: d
     updated, iso = stamp(today)
     mps = [{"name": m.name, "party": m.party, "riding": m.riding, "slug": s} for s, m in built]
     (out / "index.html").write_bytes(web.site_home(mps, updated, base))
+    (out / "mps").mkdir(exist_ok=True)
+    (out / "mps" / "index.html").write_bytes(web.mps_page([{**d, "photo": m.photo_url} for d, (_, m) in zip(mps, built)], updated, base))
     # Read by the postal-code function to turn a Represent result into a page address.
     (out / "search.json").write_text(json.dumps(mps, separators=(",", ":"), ensure_ascii=False))
     (out / "sitemap.xml").write_text(sitemap([s for s, _ in built], iso, base))
@@ -80,7 +82,7 @@ def write_index_files(out: Path, built: list[tuple[str, represent.MP]], today: d
 
 
 def build(out: Path, limit: int | None = None, only: str | None = None, budget_minutes: float | None = None,
-          base: str = SITE_URL, log=print) -> Result:
+          base: str = SITE_URL, log=print, index_only: bool = False) -> Result:
     db = cache.connect()
     fetcher = Fetcher(cache.HttpCache(db))
     people = assign_slugs(represent.roster(fetcher))
@@ -92,7 +94,7 @@ def build(out: Path, limit: int | None = None, only: str | None = None, budget_m
     updated, iso = stamp()
     out.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
-    for i, (slug, mp) in enumerate(people, 1):
+    for i, (slug, mp) in enumerate([] if index_only else people, 1):
         if budget_minutes and (time.monotonic() - started) / 60 > budget_minutes:
             res.skipped = len(people) - i + 1
             log(f"Time budget reached; {res.skipped} MPs not attempted. Run again to continue (everything fetched so far is cached).")

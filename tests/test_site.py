@@ -14,17 +14,21 @@ def test_slugs_are_readable_and_unique():
     assert [s for s, _ in got] == ["rene-cote", "john-smith-b-c", "john-smith-d", "chi-nguyen"]
 
 
-def test_sitemap_lists_home_and_every_page():
+def test_sitemap_lists_home_the_directory_and_every_page():
     xml = site.sitemap(["b", "a"], "2026-10-03", "https://x.test")
     assert xml.index("/mp/a/") < xml.index("/mp/b/") and "<loc>https://x.test/</loc>" in xml and "2026-10-03" in xml
+    assert "<loc>https://x.test/mps/</loc>" in xml
 
 
 def test_index_files(tmp_path):
     built = [("chi-nguyen", mp("Chi Nguyen", "Spadina—Harbourfront")), ("a-b", mp("A B"))]
     site.write_index_files(tmp_path, built, today=date(2026, 10, 3), base="https://x.test")
     home = (tmp_path / "index.html").read_text()
-    assert 'href="/mp/chi-nguyen/"' in home and "All 2 MPs" in home and "Oct 3, 2026" in home
-    assert 'rel="canonical" href="https://x.test/"' in home
+    assert 'rel="canonical" href="https://x.test/"' in home and 'href="/mps/"' in home and "Browse all 2 MPs" in home
+    assert "/mp/chi-nguyen/" not in home and "mprow" not in home  # the landing page does not list MPs
+    directory = (tmp_path / "mps" / "index.html").read_text()
+    assert 'href="/mp/chi-nguyen/"' in directory and 'href="/mp/a-b/"' in directory and "Oct 3, 2026" in directory
+    assert 'rel="canonical" href="https://x.test/mps/"' in directory
     assert json.loads((tmp_path / "search.json").read_text())[0] == {"name": "Chi Nguyen", "party": "X", "riding": "Spadina—Harbourfront", "slug": "chi-nguyen"}
     robots = (tmp_path / "robots.txt").read_text()
     assert "Sitemap: https://x.test/sitemap.xml" in robots and "Disallow: /api/" in robots
@@ -35,9 +39,15 @@ def test_home_never_puts_a_postal_code_in_the_address():
     assert 'method="post" action="/api/postal"' in html and "<script src" not in html
 
 
-def test_home_escapes_names():
-    html = web.site_home([{"name": "<b>x</b>", "party": "X", "riding": "R", "slug": "a"}], "d", "https://x.test").decode()
+def test_directory_has_photos_party_filters_and_escapes_names():
+    mps = [{"name": "<b>x</b>", "party": "Liberal", "riding": "R", "slug": "a", "photo": "https://photos.test/a.jpg"},
+           {"name": "Chi Nguyen", "party": "Liberal", "riding": "R2", "slug": "c"},
+           {"name": "Bo Li", "party": "Green Party", "riding": "R3", "slug": "b"}]
+    html = web.mps_page(mps, "Oct 3, 2026", "https://x.test").decode()
     assert "<b>x</b>" not in html
+    assert 'src="https://photos.test/a.jpg"' in html and 'loading="lazy"' in html and 'referrerpolicy="no-referrer"' in html
+    assert 'value="Liberal"' in html and "Liberal &middot; 2" in html and "Green Party &middot; 1" in html  # party filters with counts
+    assert html.count('class="face"') == 3 and ">CN<" in html  # initials stand in when there is no photo
 
 
 def test_a_rejected_key_stops_the_build_instead_of_failing_every_mp():

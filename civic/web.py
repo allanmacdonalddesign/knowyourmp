@@ -40,6 +40,7 @@ CSS = """
 --sans:"Manrope","Inter",ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
 --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace}
 @media (prefers-color-scheme:dark){:root{--bg:#000;--ink:#fff;--soft:#9b9b9b;--line:#d8d8d8;--rule:#333;--wash:#141414;--paper:#000;--red:#ff3347;--pro:#3fbf9f}}
+:root[data-theme=dark]{--bg:#000;--ink:#fff;--soft:#9b9b9b;--line:#d8d8d8;--rule:#333;--wash:#141414;--paper:#000;--red:#ff3347;--pro:#3fbf9f}:root[data-theme=light]{--bg:#fff;--ink:#0a0a0a;--soft:#666;--line:#0a0a0a;--rule:#d0d0d0;--wash:#f1f1f1;--paper:#fff;--red:#d80621;--pro:#218c77}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{overflow-wrap:break-word}
 body{margin:0;background:var(--bg);color:var(--ink);font:300 17px/1.55 var(--sans)}
 a{color:inherit}.wrap{max-width:1560px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line)}
@@ -70,19 +71,25 @@ a.bar:hover,button.bar:hover{background:var(--ink);color:var(--bg)}
 #searching{position:fixed;inset:0;z-index:50;background:var(--bg);display:none;flex-direction:column}
 #searching.on{display:flex}
 #searching .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;padding:40px 28px;border-bottom:1px solid var(--line);border-top:1px solid var(--line);text-align:center}
-.ring{position:relative;width:220px;height:220px}.ring svg{position:absolute;inset:0}
-.ring .spin{animation:spinring 7s linear infinite;transform-origin:110px 110px}
-.ring .lbl{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);color:var(--soft);text-transform:lowercase}
-@keyframes spinring{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.ring .spin{animation:none}}
-/* published site: MP directory */
-.mplist{display:grid;grid-template-columns:repeat(3,1fr)}
-.mprow{display:block;padding:18px 32px 20px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);text-decoration:none;color:inherit;min-width:0}
-.mprow:nth-child(3n){border-right:0}.mprow:hover .nm{color:var(--red)}
-.mprow .nm{display:block;font-size:1.15rem;line-height:1.3}.mprow .soft{display:block;margin-top:4px}
-.mprow.hidden{display:none}
-@media (max-width:900px){.mplist{grid-template-columns:1fr 1fr}.mprow:nth-child(3n){border-right:1px solid var(--line)}.mprow:nth-child(2n){border-right:0}}
-@media (max-width:600px){.mplist{grid-template-columns:1fr}.mprow{border-right:0!important;padding:16px 20px}}
+.veins{width:220px;height:212px;flex-shrink:0}.veins svg{display:block;overflow:visible}
+.veins .ol{fill:none;stroke:var(--ink);stroke-opacity:.25;stroke-width:.25;stroke-linejoin:round}
+.veins .gh{fill:none;stroke:var(--ink);stroke-opacity:.3;stroke-width:.22;stroke-dasharray:.8 .8;stroke-linecap:round}
+.veins .vn{fill:none;stroke:var(--red);stroke-width:.4;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:vein 4.8s cubic-bezier(.45,0,.2,1) infinite;animation-delay:calc(var(--i)*.3s)}
+.veins .node{fill:var(--red)}.veins .ping{fill:none;stroke:var(--red);stroke-width:.25;transform-box:fill-box;transform-origin:center;animation:ping 2.4s ease-out infinite}
+@keyframes vein{0%{stroke-dashoffset:1;opacity:1}21%{stroke-dashoffset:0}76%{stroke-dashoffset:0;opacity:1}90%{stroke-dashoffset:0;opacity:0}100%{stroke-dashoffset:1;opacity:0}}
+@keyframes ping{from{transform:scale(1);opacity:.6}to{transform:scale(3.2);opacity:0}}
+@media (prefers-reduced-motion:reduce){.veins .vn{animation:none;stroke-dashoffset:0}.veins .ping{animation:none;opacity:.4}}
+/* published site: name results (landing) and the all-MPs page */
+.results{margin-top:10px;border:1px solid var(--line)}.rmsg{padding:12px 16px;border-bottom:1px solid var(--line)}
+.rrow{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:12px 16px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.rrow:last-child{border-bottom:0}.rrow:hover .nm{color:var(--red)}.rrow .nm{font-size:1.05rem}
+.faces{display:grid;grid-template-columns:repeat(auto-fill,minmax(188px,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.face{display:block;background:var(--bg);text-decoration:none;color:inherit;min-width:0;padding-bottom:16px}.face:hover .nm{color:var(--red)}
+.face .ph{display:block;position:relative;aspect-ratio:4/5;background:var(--wash);border-top:4px solid var(--party,var(--line));overflow:hidden}
+.face .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
+.face .ini{position:absolute;inset:0;display:grid;place-items:center;font-size:3rem;font-weight:200;color:var(--soft)}
+.face .nm{display:block;padding:12px 14px 0;font-size:1.02rem;line-height:1.25}.face .meta2{display:block;padding:4px 14px 0}
+.pchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.pchip .sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;background:var(--c,var(--ink))}
 @keyframes slide{to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:reduce){.marq .t{animation:none}}
 .sec{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:8px 16px;padding:22px 32px;border-bottom:1px solid var(--line)}
@@ -199,13 +206,23 @@ def party_colour(party: str) -> str:
     return next((c for key, c in PARTY_COLOURS if p.startswith(key)), "#888888")
 
 
-def searching_overlay() -> str:
-    """Full-screen 'searching' state shown while a lookup runs; a ring of maple leaves spins around the word."""
-    leaves = "".join(f'<use href="#lf" transform="translate(110 110) rotate({i * 30}) translate(0 -80) rotate(90) scale(.34)"/>' for i in range(12))
-    return (f'<div id="searching" role="status" aria-live="polite" aria-hidden="true">{topbar("Meet your MP", LEAF)}'
-            '<div class="stage"><div class="ring"><svg viewBox="0 0 220 220" aria-hidden="true">'
-            f'<defs><path id="lf" fill="#ce0908" transform="translate(-26.5 -179)" d="{LEAF_PATH}"/></defs><g class="spin">{leaves}</g></svg>'
-            '<div class="lbl mono">searching</div></div>'
+VEIN_TIPS = [(26.5, 161.0), (18.3, 165.0), (34.7, 165.0), (14.4, 170.6), (38.6, 170.5), (7.6, 172.8), (45.4, 172.8), (6.8, 179.6), (46.2, 179.6)]
+
+
+def veins_svg() -> str:
+    """A maple leaf whose veins draw themselves outward from the stem, one after another, with a ping at the root."""
+    paths = ["M26.5 198.2L26.5 190.5"] + [f"M26.5 190.5L{x} {y}" for x, y in VEIN_TIPS]
+    ghost = "".join(f'<path d="M26.5 190.5L{x} {y}"/>' for x, y in VEIN_TIPS)
+    draw = "".join(f'<path class="vn" pathLength="1" style="--i:{i}" d="{d}"/>' for i, d in enumerate(paths))
+    return ('<svg viewBox="4.994 158.248 43.012 41.505" width="220" height="212" aria-hidden="true">'
+            f'<path class="ol" d="{LEAF_PATH}"/><g class="gh">{ghost}</g>{draw}'
+            '<circle class="ping" cx="26.5" cy="190.5" r="1"/><circle class="node" cx="26.5" cy="190.5" r=".85"/></svg>')
+
+
+def searching_overlay(on: bool = False) -> str:
+    """Full-screen 'searching' state shown while a lookup runs: a maple leaf whose veins draw outward. on=True keeps it up (preview)."""
+    return (f'<div id="searching"{" class=on" if on else ""} role="status" aria-live="polite" aria-hidden="{"false" if on else "true"}">{topbar("Meet your MP", LEAF)}'
+            f'<div class="stage"><div class="veins">{veins_svg()}</div>'
             '<div><div class="mono soft">Reading public records for your MP</div>'
             '<p class="fine" style="max-width:420px;margin:12px auto 0">The first lookup for an MP can take a minute or two. After that it is fast. '
             'Your postal code is never stored or logged.</p></div></div>'
@@ -247,20 +264,16 @@ q.classList.toggle('byname',e.target.value==='name');q.focus();}});}})();</scrip
 
 
 SITE_NOTES = {"postal": "We could not read that postal code. Please check it.", "notfound": "No MP found for that postal code. Try searching by name.",
-              "down": "The postal code lookup is not available right now. Search by name below."}
+              "down": "The postal code lookup is not available right now. Search by name instead."}
 
 
 def site_home(mps: list[dict], updated: str, url: str) -> bytes:
-    """The published directory page: lookup on top, every MP below as a plain link so it can be crawled.
-
-    mps: dicts with name, party, riding, slug. A postal code is POSTed to /api/postal (a Cloudflare Pages function) and never put in a URL."""
-    rows = "".join(
-        f'<a class="mprow" href="/mp/{escape(m["slug"])}/" data-slug="{escape(m["slug"])}" data-text="{escape((m["name"] + " " + m["riding"] + " " + m["party"]).lower())}">'
-        f'<span class="nm">{escape(m["name"])}</span><span class="mono soft">{escape(m["party"])} &middot; {escape(m["riding"])}</span></a>'
-        for m in sorted(mps, key=lambda m: m["name"].casefold()))
+    """The published landing page: just the lookup, as designed. Name search shows matches only while typing (from /search.json),
+    and the full list lives on /mps/. A postal code is POSTed to /api/postal (a Cloudflare Pages function) and never put in a URL."""
     modes = "".join(f'<label><input type="radio" name="by" value="{k}"{" checked" if k == "postal" else ""}><span>{lbl}</span></label>'
                     for k, lbl in (("postal", "Postal code"), ("name", "MP name")))
-    label, ph, maxlen, hint = LOOKUP_MODES["postal"]
+    modes_cfg = {**LOOKUP_MODES, "postal": (*LOOKUP_MODES["postal"][:3], "Your postal code is only used to find your riding. It is never stored, logged or put in the address.")}
+    label, ph, maxlen, hint = modes_cfg["postal"]
     title = "Know Your MP: see how your Member of Parliament votes, in plain language"
     desc = ("Look up your Member of Parliament by postal code or name. See how they voted, the bills they sponsored and what they speak about, "
             "in plain language with links to the sources.")
@@ -273,27 +286,76 @@ def site_home(mps: list[dict], updated: str, url: str) -> bytes:
 <div class="mode mono" role="radiogroup" aria-label="Look up by">{modes}</div>
 <label for="q" class="mono soft" id="qlabel">{label}</label>
 <input class="postal" id="q" name="code" placeholder="{ph}" required maxlength="{maxlen}" autocomplete="off" autofocus>
-<div class="fine"><span id="qhint">{hint}</span> A postal code is sent only to look up your riding. It is not stored or put in the address.</div>
+<div class="results hidden" id="results" aria-live="polite"></div>
+<div class="fine"><span id="qhint">{hint}</span></div>
 <button class="cta mono go" type="submit">Find my MP <span class="arrow">&#8599;</span></button></form></div>
 {marquee("Know your MP")}
-<div class="sec" id="all"><div><h2 id="listh">All {len(mps)} MPs</h2></div><span class="mono soft">Updated {escape(updated)}</span></div>
-<div class="mplist" id="mplist">{rows}</div>
-<div class="grid"><div class="cell s12 fine" style="border-bottom:0">Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same page. Descriptions are AI-written from those records; follow the links to check.</div></div>
-<script>(()=>{{const M={json.dumps(LOOKUP_MODES)},N={json.dumps(SITE_NOTES)},f=document.getElementById('lookup'),q=document.getElementById('q'),
-rows=[...document.querySelectorAll('.mprow')],h=document.getElementById('listh'),note=document.getElementById('note'),all=rows.length;
-let mode='postal';
-const show=fn=>{{let n=0;rows.forEach(r=>{{const ok=fn(r);r.classList.toggle('hidden',!ok);if(ok)n++;}});return n;}};
-const count=n=>{{h.textContent=n===all?'All '+all+' MPs':n+(n===1?' MP':' MPs');}};
+<div class="grid"><div class="cell s12 fine" style="border-bottom:0;display:flex;justify-content:space-between;gap:8px 24px;flex-wrap:wrap"><span>Data: openparliament.ca, ourcommons.ca, Parliament of Canada. Nonpartisan: every MP gets the same page. Descriptions are AI-written from those records; follow the links to check.</span>
+<a class="mono" href="/mps/">Browse all {len(mps)} MPs &#8599;</a></div></div>
+<script>(()=>{{const M={json.dumps(modes_cfg)},N={json.dumps(SITE_NOTES)},f=document.getElementById('lookup'),q=document.getElementById('q'),
+res=document.getElementById('results'),note=document.getElementById('note');
+let mode='postal',idx=null;
+const fold=t=>t.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();
+const load=()=>idx||(idx=fetch('/search.json').then(r=>r.json()).then(a=>a.map(m=>({{...m,t:fold(m.name+' '+m.riding+' '+m.party)}}))).catch(()=>[]));
+const show=(list,msg)=>{{res.textContent='';if(msg){{const d=document.createElement('div');d.className='mono soft rmsg';d.textContent=msg;res.appendChild(d);}}
+ list.slice(0,8).forEach(m=>{{const a=document.createElement('a');a.className='rrow';a.href='/mp/'+m.slug+'/';const n=document.createElement('span');n.className='nm';n.textContent=m.name;
+  const s=document.createElement('span');s.className='mono soft';s.textContent=m.party+' \\u00b7 '+m.riding;a.append(n,s);res.appendChild(a);}});
+ res.classList.toggle('hidden',!list.length&&!msg);}};
+const search=async()=>{{if(mode!=='name')return;const w=fold(q.value).split(/\\s+/).filter(Boolean);if(!w.length){{show([]);return;}}
+ const all=await load();show(all.filter(m=>w.every(x=>m.t.includes(x))));}};
 f.addEventListener('change',e=>{{if(e.target.name!=='by')return;mode=e.target.value;const m=M[mode];
-document.getElementById('qlabel').textContent=m[0];q.placeholder=m[1];q.maxLength=m[2];document.getElementById('qhint').textContent=m[3];
-q.name=mode==='name'?'q':'code';q.classList.toggle('byname',mode==='name');q.value='';count(show(()=>true));q.focus();}});
-q.addEventListener('input',()=>{{if(mode!=='name')return;const w=q.value.toLowerCase().split(/\s+/).filter(Boolean);count(show(r=>w.every(x=>r.dataset.text.includes(x))));}});
-f.addEventListener('submit',e=>{{if(mode!=='name')return;e.preventDefault();const v=rows.filter(r=>!r.classList.contains('hidden'));if(v.length===1)location.href=v[0].href;else document.getElementById('all').scrollIntoView();}});
+ document.getElementById('qlabel').textContent=m[0];q.placeholder=m[1];q.maxLength=m[2];document.getElementById('qhint').textContent=m[3];
+ q.name=mode==='name'?'q':'code';q.classList.toggle('byname',mode==='name');q.value='';show([]);q.focus();}});
+q.addEventListener('input',search);
+f.addEventListener('submit',e=>{{if(mode!=='name')return;e.preventDefault();const a=res.querySelector('.rrow');if(a)location.href=a.href;}});
 const sp=new URLSearchParams(location.search);
 if(sp.get('error')&&N[sp.get('error')]){{note.textContent=N[sp.get('error')];note.classList.remove('hidden');}}
-if(sp.get('choose')){{const want=sp.get('choose').split(',');count(show(r=>want.includes(r.dataset.slug)));h.textContent='More than one MP covers that postal code. Choose yours.';document.getElementById('all').scrollIntoView();}}
+if(sp.get('choose')){{const want=sp.get('choose').split(',');load().then(a=>{{show(a.filter(m=>want.includes(m.slug)),'More than one MP covers that postal code. Choose yours.');}});}}
 }})();</script>"""
     return page(title, body, seo_head(title, desc, url + "/"))
+
+
+def mps_page(mps: list[dict], updated: str, url: str) -> bytes:
+    """Every sitting MP with a photo, filterable by party and by name. Linked from the footer; the landing page stays as designed.
+
+    mps: dicts with name, party, riding, slug and (optional) photo. The links also give search engines a path to each MP page."""
+    from .sources.represent import _fold
+
+    counts: dict[str, int] = {}
+    for m in mps:
+        counts[m["party"]] = counts.get(m["party"], 0) + 1
+    order = sorted(counts, key=lambda p: (-counts[p], p))
+    chips = (f'<label class="chip pchip"><input type="radio" name="party" value="" checked><span>All &middot; {len(mps)}</span></label>' +
+             "".join(f'<label class="chip pchip"><input type="radio" name="party" value="{escape(p)}"><span><i class="sw" style="--c:{party_colour(p)}"></i>{escape(p)} &middot; {counts[p]}</span></label>'
+                     for p in order))
+
+    def face(m: dict) -> str:
+        ini = "".join(w[0] for w in m["name"].split()[:2])
+        img = (f'<img src="{escape(m["photo"])}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">' if m.get("photo") else "")
+        return (f'<a class="face" href="/mp/{escape(m["slug"])}/" data-party="{escape(m["party"])}" data-text="{escape(_fold(m["name"] + " " + m["riding"] + " " + m["party"]))}">'
+                f'<span class="ph" style="--party:{party_colour(m["party"])}"><span class="ini">{escape(ini)}</span>{img}</span>'
+                f'<span class="nm">{escape(m["name"])}</span><span class="mono soft meta2">{escape(m["party"])} &middot; {escape(m["riding"])}</span></a>')
+
+    cards = "".join(face(m) for m in sorted(mps, key=lambda m: m["name"].casefold()))
+    title = f"All {len(mps)} Members of Parliament: photos, parties and ridings | Know Your MP"
+    desc = "Every sitting Member of Parliament in Canada with their photo, party and riding. Filter by party or search by name, then see how each one votes."
+    body = f"""{topbar("All MPs", LEAF)}
+<div class="grid"><form class="cell s12 filter" id="filter" style="padding-top:26px" onsubmit="return false"><a class="mono back" href="/">&lsaquo; Back</a>
+<h1 class="name" style="margin-top:18px">All MPs</h1>
+<div class="mono soft" id="count" style="margin-top:6px">{len(mps)} MPs &middot; Updated {escape(updated)}</div>
+<label for="q" class="mono soft" style="display:block;margin-top:22px">Search by name or riding</label>
+<input type="text" id="q" placeholder="Try: Toronto, Nguyen, Bloc&hellip;" autocomplete="off">
+<div class="pchips" role="radiogroup" aria-label="Filter by party">{chips}</div></form></div>
+<div class="faces" id="faces">{cards}</div>
+{marquee("Know your MP")}<a class="bar mono" href="/">Find my MP <span class="arrow">&#8599;</span></a>
+<div class="grid"><div class="cell s12 fine" style="border-bottom:0">Photos and details: ourcommons.ca and openparliament.ca. Nonpartisan: every MP gets the same page. Descriptions are AI-written from public records; follow the links to check.</div></div>
+<script>(()=>{{const f=document.getElementById('filter'),q=document.getElementById('q'),cards=[...document.querySelectorAll('.face')],c=document.getElementById('count'),total=cards.length,upd={json.dumps(updated)};
+const fold=t=>t.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();
+const apply=()=>{{const w=fold(q.value).split(/\\s+/).filter(Boolean),p=(f.querySelector('input[name=party]:checked')||{{}}).value||'';let n=0;
+ cards.forEach(a=>{{const ok=(!p||a.dataset.party===p)&&w.every(x=>a.dataset.text.includes(x));a.classList.toggle('hidden',!ok);if(ok)n++;}});
+ c.textContent=(n===total?total+' MPs':n+' of '+total+' MPs')+' \\u00b7 Updated '+upd;}};
+f.addEventListener('input',apply);f.addEventListener('change',apply);}})();</script>"""
+    return page(title, body, seo_head(title, desc, url + "/mps/"))
 
 
 def choose_riding(e: service.SplitPostcode, q, by: str = "postal") -> bytes:
@@ -587,7 +649,7 @@ def card_page(c, postal, pick, site: dict | None = None) -> bytes:
     footer = (f'{marquee("Know your MP")}<a class="bar mono" href="/">{"Find another MP" if site else "Look up another postal code"} <span class="arrow">&#8599;</span></a>'
               '<div class="grid"><div class="cell s12 fine" style="border-bottom:0">In Canada MPs almost always vote with their party, so a voting record says less than what an MP chooses to speak about and sponsor. '
               'Sources: openparliament.ca, ourcommons.ca, parl.ca. Descriptions are AI-written from those records; follow the links to check.'
-              + (f' Updated <time datetime="{site["updated_iso"]}">{site["updated"]}</time>.' if site else "") + '</div></div>')
+              + (f' Updated <time datetime="{site["updated_iso"]}">{site["updated"]}</time>. <a href="/mps/">Browse all MPs</a>.' if site else "") + '</div></div>')
 
     body = f'{topbar("MP card")}{card_view}{votes_view}{footer}<script>{FILTER_JS}{WORDS_JS}</script>'
     if not site:
@@ -628,6 +690,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(page("Forbidden", "<h1>Forbidden</h1>"), 403)
         if self.path == "/":
             return self._send(home())
+        if self.path.split("?")[0] == "/loading-preview":  # holds the searching screen up so it can be looked at; ?theme=dark|light
+            theme = "dark" if "theme=dark" in self.path else "light" if "theme=light" in self.path else ""
+            html = page("Searching", searching_overlay(on=True))
+            return self._send(html.replace(b'<html lang="en">', f'<html lang="en" data-theme="{theme}">'.encode()) if theme else html)
         self._send(page("Not found", "<h1>Not found</h1>"), 404)
 
     def do_POST(self):

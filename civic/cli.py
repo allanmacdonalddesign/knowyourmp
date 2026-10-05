@@ -65,12 +65,13 @@ def site_cmd(
     limit: int = typer.Option(None, help="Only build the first N MPs (for testing)"),
     only: str = typer.Option(None, help="Only build this MP's page, e.g. chi-nguyen"),
     budget_minutes: float = typer.Option(None, help="Stop starting new MPs after this long; run again to continue"),
+    index_only: bool = typer.Option(False, help="Only rewrite the home page, /mps/ page, sitemap and robots from the pages already built"),
 ):
     """Build the static site: a page for every sitting MP, a directory page, sitemap and robots.txt."""
     from . import site
 
     try:
-        res = site.build(out, limit=limit, only=only, budget_minutes=budget_minutes)
+        res = site.build(out, limit=limit, only=only, budget_minutes=budget_minutes, index_only=index_only)
     except site.AccountProblem as e:
         typer.echo(f"Stopped: {e}")
         raise typer.Exit(4)
